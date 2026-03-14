@@ -249,25 +249,87 @@ def register_routes(app: FastAPI):
         """任务实时更新 WebSocket"""
         await websocket.accept()
         
-        try:
-            while True:
+        # 订阅事件
+        from core.events import EventBus, EventType, get_event_bus
+        
+        event_bus = get_event_bus()
+        
+        async def on_task_event(event):
+            """任务事件处理器"""
+            if event.payload.get("task_id") == task_id:
+                try:
+                    await websocket.send_json({
+                        "type": event.type,
+                        "payload": event.payload,
+                        "timestamp": event.timestamp,
+                    })
+                except:
+                    pass
+        
+        async def on_progress(event):
+            """进度事件处理器"""
+            if event.payload.get("task_id") == task_id:
                 if task_id in tasks:
                     task = tasks[task_id]
-                    await websocket.send_json({
-                        "task_id": task_id,
-                        "status": task["status"],
-                        "progress": task["progress"],
-                        "subtasks": task["subtasks"],
-                        "updated_at": task["updated_at"],
-                    })
-                else:
-                    await websocket.send_json({"error": "任务不存在"})
-                
+                    try:
+                        await websocket.send_json({
+                            "task_id": task_id,
+                            "status": task["status"],
+                            "progress": task["progress"],
+                            "subtasks": task["subtasks"],
+                            "updated_at": task["updated_at"],
+                        })
+                    except:
+                        pass
+        
+        # 订阅相关事件
+        event_bus.subscribe_async(EventType.TASK_PROGRESS, on_progress)
+        event_bus.subscribe_async(EventType.TASK_SUBTASK_COMPLETED, on_task_event)
+        event_bus.subscribe_async(EventType.TASK_COMPLETED, on_task_event)
+        event_bus.subscribe_async(EventType.TASK_FAILED, on_task_event)
+        
+        try:
+            # 发送初始状态
+            if task_id in tasks:
+                task = tasks[task_id]
+                await websocket.send_json({
+                    "task_id": task_id,
+                    "status": task["status"],
+                    "progress": task["progress"],
+                    "subtasks": task["subtasks"],
+                    "updated_at": task["updated_at"],
+                })
+            
+            # 保持连接
+            while True:
                 await asyncio.sleep(1)
+                
+                # 定期发送心跳
+                try:
+                    await websocket.send_json({"type": "heartbeat", "timestamp": datetime.now().isoformat()})
+                except:
+                    break
         except WebSocketDisconnect:
             logger.info(f"WebSocket 断开：{task_id}")
         except Exception as e:
             logger.error(f"WebSocket 错误：{e}")
+        finally:
+            # 取消订阅
+            event_bus.unsubscribe(EventType.TASK_PROGRESS, on_progress)
+            event_bus.unsubscribe(EventType.TASK_SUBTASK_COMPLETED, on_task_event)
+            event_bus.unsubscribe(EventType.TASK_COMPLETED, on_task_event)
+            event_bus.unsubscribe(EventType.TASK_FAILED, on_task_event)
+    
+    @app.get("/api/events")
+    async def get_events(limit: int = 100):
+        """获取事件历史"""
+        from core.events import get_event_bus
+        event_bus = get_event_bus()
+        events = event_bus.get_history(limit=limit)
+        return {
+            "events": [e.to_dict() for e in events],
+            "stats": event_bus.get_stats(),
+        }
 
 
 async def execute_task(task_id: str, request: TaskRequest):
@@ -537,6 +599,58 @@ def get_html_content() -> str:
     
     <script>
         let tasks = {};
+        let wsConnections = {};
+        
+        // 创建 WebSocket 连接
+        function connectWebSocket(taskId) {
+            if (wsConnections[taskId]) return;
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${protocol}//${window.location.host}/ws/tasks/${taskId}`);
+            
+            ws.onopen = () => {
+                addLog(`WebSocket 已连接：${taskId}`, 'info');
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'heartbeat') return;
+                
+                // 更新任务状态
+                if (data.task_id) {
+                    if (tasks[data.task_id]) {
+                        tasks[data.task_id].status = data.status;
+                        tasks[data.task_id].progress = data.progress;
+                        tasks[data.task_id].subtasks = data.subtasks;
+                        tasks[data.task_id].updated_at = data.updated_at;
+                        renderTasks();
+                        updateStats();
+                    }
+                }
+                
+                // 显示事件通知
+                if (data.type) {
+                    const typeMap = {
+                        'task.completed': 'success',
+                        'task.failed': 'error',
+                        'task.progress': 'info',
+                        'task.subtask.completed': 'success',
+                    };
+                    addLog(`${data.type}: ${JSON.stringify(data.payload)}`, typeMap[data.type] || 'info');
+                }
+            };
+            
+            ws.onclose = () => {
+                addLog(`WebSocket 已断开：${taskId}`, 'warning');
+                delete wsConnections[taskId];
+            };
+            
+            ws.onerror = (error) => {
+                addLog(`WebSocket 错误：${taskId}`, 'error');
+            };
+            
+            wsConnections[taskId] = ws;
+        }
         
         // 加载工具状态
         async function loadTools() {
@@ -554,6 +668,39 @@ def get_html_content() -> str:
                 addLog(`可用工具：${data.tools.map(t => t.name).join(', ')}`, 'info');
             } catch (error) {
                 addLog(`加载工具失败：${error.message}`, 'warning');
+            }
+        }
+        
+        // 查看任务详情
+        function viewTask(taskId) {
+            connectWebSocket(taskId);
+            addLog(`查看任务：${taskId}`, 'info');
+        }
+        
+        // 加载事件历史
+        async function loadEvents() {
+            try {
+                const response = await fetch('/api/events?limit=20');
+                const data = await response.json();
+                
+                const output = document.getElementById('logOutput');
+                const events = data.events.reverse();
+                
+                output.innerHTML = events.map(e => {
+                    const time = new Date(e.timestamp * 1000).toLocaleTimeString();
+                    const typeMap = {
+                        'task.completed': 'log-success',
+                        'task.failed': 'log-error',
+                        'task.progress': 'log-info',
+                        'task.subtask.completed': 'log-success',
+                    };
+                    const className = typeMap[e.type] || 'log-info';
+                    return `<div class="log-line ${className}">[${time}] ${e.type}: ${JSON.stringify(e.payload)}</div>`;
+                }).join('');
+                
+                output.scrollTop = output.scrollHeight;
+            } catch (error) {
+                console.error('加载事件失败:', error);
             }
         }
         
@@ -585,6 +732,10 @@ def get_html_content() -> str:
                 
                 const data = await response.json();
                 addLog(`任务已创建：${data.task_id} (使用 ${data.tool || 'opencode'})`, 'info');
+                
+                // 连接 WebSocket
+                connectWebSocket(data.task_id);
+                
                 loadTasks();
             } catch (error) {
                 addLog(`创建任务失败：${error.message}`, 'error');
@@ -645,8 +796,16 @@ def get_html_content() -> str:
                         <div class="progress-bar">
                             <div class="progress-fill" style="width: ${task.progress || 0}%"></div>
                         </div>
+                        ${task.status === 'running' ? `
+                            <div style="margin-top: 8px;">
+                                <span style="font-size: 11px; color: #00d9ff;">🔴 实时更新中</span>
+                            </div>
+                        ` : ''}
                     </div>
                     <span class="task-status status-${task.status}">${task.status}</span>
+                    ${task.status === 'running' ? `
+                        <button onclick="viewTask('${task.task_id}')" style="margin-left: 12px; padding: 4px 12px; font-size: 12px;">查看</button>
+                    ` : ''}
                 </div>
                 `;
             }).join('');
@@ -677,13 +836,15 @@ def get_html_content() -> str:
             return div.innerHTML;
         }
         
-        // 轮询更新
-        setInterval(loadTasks, 3000);
+        // 轮询更新（降低频率，因为现在有 WebSocket）
+        setInterval(loadTasks, 10000);  // 10 秒一次
+        setInterval(loadEvents, 5000);   // 5 秒刷新事件
         
         // 初始加载
         loadTools();
         loadTasks();
-        addLog('Web UI 已就绪', 'success');
+        loadEvents();
+        addLog('Web UI 已就绪，WebSocket 实时推送已启用', 'success');
     </script>
 </body>
 </html>

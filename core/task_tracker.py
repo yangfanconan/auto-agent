@@ -1,6 +1,8 @@
 """
 任务跟踪器
 实时跟踪任务进度、记录卡点、生成简报
+
+增强版：集成事件总线
 """
 
 import json
@@ -11,8 +13,10 @@ from dataclasses import dataclass, field, asdict
 
 try:
     from ..utils import get_logger
+    from ..core.events import EventBus, Event, EventType, publish_event
 except ImportError:
     from utils import get_logger
+    from core.events import EventBus, Event, EventType, publish_event
 
 try:
     from .task_parser import TaskPlan, SubTask, TaskType
@@ -70,7 +74,18 @@ class TaskTracker:
         self._plans[plan.id] = plan
         self._events[plan.id] = []
         self.logger.info(f"注册任务计划：{plan.id}")
-        
+
+        # 发布事件
+        publish_event(
+            event_type=EventType.TASK_CREATED,
+            payload={
+                "task_id": plan.id,
+                "title": plan.title,
+                "subtasks_count": len(plan.subtasks),
+            },
+            source="task_tracker"
+        )
+
         # 记录事件
         self._add_event(plan.id, TaskEvent(
             timestamp=datetime.now().isoformat(),
@@ -83,19 +98,29 @@ class TaskTracker:
     def start_task(self, task_id: str):
         """开始执行任务"""
         self._current_task_id = task_id
-        
+
         if task_id in self._plans:
             plan = self._plans[task_id]
             plan.status = "in_progress"
             plan.updated_at = datetime.now().isoformat()
-            
+
+            # 发布事件
+            publish_event(
+                event_type=EventType.TASK_STARTED,
+                payload={
+                    "task_id": task_id,
+                    "title": plan.title,
+                },
+                source="task_tracker"
+            )
+
             self._add_event(task_id, TaskEvent(
                 timestamp=datetime.now().isoformat(),
                 event_type="started",
                 task_id=task_id,
                 message=f"任务开始执行：{plan.title}"
             ))
-            
+
             self.logger.info(f"任务开始：{task_id}")
     
     def start_subtask(self, plan_id: str, subtask_id: str):
@@ -144,22 +169,34 @@ class TaskTracker:
         """完成子任务"""
         if plan_id not in self._plans:
             return
-        
+
         plan = self._plans[plan_id]
         subtask = self._get_subtask(plan, subtask_id)
-        
+
         if subtask:
             subtask.status = "completed"
             subtask.progress = 100.0
             subtask.result = result
             subtask.completed_at = datetime.now().isoformat()
-            
+
             # 计算实际耗时
             if "start_time" in subtask.metadata:
                 start = datetime.fromisoformat(subtask.metadata["start_time"])
                 end = datetime.fromisoformat(subtask.completed_at)
                 subtask.actual_duration = (end - start).total_seconds()
-            
+
+            # 发布事件
+            publish_event(
+                event_type=EventType.TASK_SUBTASK_COMPLETED,
+                payload={
+                    "task_id": plan_id,
+                    "subtask_id": subtask_id,
+                    "subtask_name": subtask.name,
+                    "duration": subtask.actual_duration,
+                },
+                source="task_tracker"
+            )
+
             self._add_event(plan_id, TaskEvent(
                 timestamp=datetime.now().isoformat(),
                 event_type="subtask_completed",
@@ -167,9 +204,9 @@ class TaskTracker:
                 message=f"子任务完成：{subtask.name}",
                 details={"result": result}
             ))
-            
+
             self.logger.info(f"子任务完成：{subtask_id}")
-            
+
             # 更新计划进度
             self._update_plan_progress(plan)
     
@@ -202,18 +239,31 @@ class TaskTracker:
         """完成任务计划"""
         if plan_id not in self._plans:
             return
-        
+
         plan = self._plans[plan_id]
         plan.status = "completed"
         plan.updated_at = datetime.now().isoformat()
-        
+
+        # 发布事件
+        publish_event(
+            event_type=EventType.TASK_COMPLETED,
+            payload={
+                "task_id": plan_id,
+                "title": plan.title,
+                "progress": plan.get_progress(),
+                "completed_count": plan.get_completed_count(),
+                "total_subtasks": len(plan.subtasks),
+            },
+            source="task_tracker"
+        )
+
         self._add_event(plan_id, TaskEvent(
             timestamp=datetime.now().isoformat(),
             event_type="completed",
             task_id=plan_id,
             message=f"任务计划完成：{plan.title}"
         ))
-        
+
         self.logger.info(f"任务计划完成：{plan_id}")
         self._save_plan(plan_id)
     
@@ -221,12 +271,23 @@ class TaskTracker:
         """任务计划失败"""
         if plan_id not in self._plans:
             return
-        
+
         plan = self._plans[plan_id]
         plan.status = "failed"
         plan.updated_at = datetime.now().isoformat()
         plan.metadata["failure_reason"] = error
-        
+
+        # 发布事件
+        publish_event(
+            event_type=EventType.TASK_FAILED,
+            payload={
+                "task_id": plan_id,
+                "title": plan.title,
+                "error": error,
+            },
+            source="task_tracker"
+        )
+
         self._add_event(plan_id, TaskEvent(
             timestamp=datetime.now().isoformat(),
             event_type="failed",
@@ -234,7 +295,7 @@ class TaskTracker:
             message=f"任务计划失败：{plan.title}",
             details={"error": error}
         ))
-        
+
         self.logger.error(f"任务计划失败：{plan_id} - {error}")
         self._save_plan(plan_id)
     

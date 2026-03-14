@@ -13,10 +13,12 @@ import os
 
 try:
     from ..utils import get_logger, CodeGenerationException
+    from ..utils.cache import get_cache
     from ..adapters import get_tool, OpencodeAdapter, QwencodeAdapter
     from ..core.task_parser import PROJECT_TEMPLATES
 except ImportError:
     from utils import get_logger, CodeGenerationException
+    from utils.cache import get_cache
     from adapters import get_tool, OpencodeAdapter, QwencodeAdapter
     from core.task_parser import PROJECT_TEMPLATES
 
@@ -343,27 +345,38 @@ if __name__ == "__main__":
         return result
     
     def _generate_with_opencode(self, description: str, language: str) -> Optional[str]:
-        """使用 opencode 生成代码"""
+        """使用 opencode 生成代码（带缓存）"""
         if self.opencode and hasattr(self.opencode, 'generate_code'):
             try:
+                # 检查缓存
+                cache = get_cache()
+                cached_code = cache.get_cached_code(description, language)
+                if cached_code:
+                    self.logger.info(f"使用缓存的代码：{description[:50]}...")
+                    return cached_code
+                
                 prompt = f"请用{language}编写以下功能的代码，要求：\n"
                 prompt += "1. 代码结构清晰，遵循最佳实践\n"
                 prompt += "2. 添加必要的注释\n"
                 prompt += "3. 包含完整的错误处理\n\n"
                 prompt += f"功能描述：{description}"
-                
+
                 result = self.opencode.call_interactive(prompt, str(self.workspace))
-                
+
                 if result.success:
                     # 提取代码内容
                     code = self._extract_code_from_output(result.output, language)
+                    
+                    # 缓存结果
+                    cache.cache_code(description, code, language)
+                    
                     return code
                 else:
                     self.logger.warning(f"Opencode 调用失败：{result.error}")
-            
+
             except Exception as e:
                 self.logger.warning(f"使用 opencode 生成代码失败：{e}")
-        
+
         # 降级方案：使用 qwencode
         return self._generate_with_qwencode(description, language)
     
