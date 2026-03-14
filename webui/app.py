@@ -564,20 +564,30 @@ def get_html_content() -> str:
                 return;
             }
             
-            container.innerHTML = taskArray.map(task => `
+            container.innerHTML = taskArray.map(task => {
+                let dateStr = '未知时间';
+                try {
+                    const date = new Date(task.created_at);
+                    dateStr = date.toLocaleString('zh-CN');
+                } catch (e) {
+                    dateStr = task.created_at || '未知时间';
+                }
+                
+                return `
                 <div class="task-item">
                     <div class="task-info">
                         <div><strong>${escapeHtml(task.description)}</strong></div>
                         <div style="color: #888; font-size: 13px; margin-top: 4px;">
-                            ${new Date(task.created_at).toLocaleString()}
+                            ${dateStr}
                         </div>
                         <div class="progress-bar">
-                            <div class="progress-fill" style="width: ${task.progress}%"></div>
+                            <div class="progress-fill" style="width: ${task.progress || 0}%"></div>
                         </div>
                     </div>
                     <span class="task-status status-${task.status}">${task.status}</span>
                 </div>
-            `).join('');
+                `;
+            }).join('');
         }
         
         // 更新统计
