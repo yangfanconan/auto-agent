@@ -1,0 +1,48 @@
+# Auto-Agent 配置文件
+
+# 基本配置
+name: auto-agent
+version: 1.0.0
+workspace: ""  # 空表示使用当前目录
+
+# Opencode 配置
+opencode:
+  enabled: true
+  path: ""  # 空表示自动检测
+  timeout: 300  # 超时时间（秒）
+  max_retries: 3  # 最大重试次数
+
+# Qwencode 配置
+qwencode:
+  enabled: true
+  path: ""  # 空表示自动检测
+  timeout: 180
+  max_retries: 3
+
+# Git 配置
+git:
+  auto_commit: true
+  auto_push: false
+  branch_prefix: feature
+  commit_template: "{type}: {description}"
+
+# 测试配置
+test:
+  auto_test: true
+  coverage_threshold: 90.0  # 覆盖率目标（%）
+  test_framework: pytest
+  timeout: 600
+
+# 环境配置
+environment:
+  python_version: "3.13"
+  node_version: "22"
+  auto_install: true
+  check_ports: true
+
+# 日志配置
+log:
+  level: INFO  # DEBUG, INFO, WARNING, ERROR
+  save_json: true
+  max_file_size: 10485760  # 10MB
+  backup_count: 5

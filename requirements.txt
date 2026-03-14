@@ -1,0 +1,18 @@
+# Auto-Agent 依赖包
+
+# 核心依赖
+PyYAML>=6.0
+
+# Git 操作
+GitPython>=3.1.40
+
+# 测试框架
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# 工具调用
+# opencode 和 qwencode 通过命令行调用，无需 Python 包
+
+# 可选依赖
+# rich>=13.0.0  # 美化终端输出
+# tqdm>=4.66.0  # 进度条
