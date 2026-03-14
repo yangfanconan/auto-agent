@@ -13,6 +13,14 @@ pytest-cov>=4.1.0
 # 工具调用
 # opencode 和 qwencode 通过命令行调用，无需 Python 包
 
-# 可选依赖
-# rich>=13.0.0  # 美化终端输出
-# tqdm>=4.66.0  # 进度条
+# 可视化与交互
+rich>=13.0.0          # 美化终端输出
+prompt-toolkit>=3.0.0 # 交互式命令行
+tqdm>=4.66.0          # 进度条
+
+# Web UI（可选）
+fastapi>=0.104.0      # Web API 框架
+uvicorn>=0.24.0       # ASGI 服务器
+
+# 工具函数
+python-dotenv>=1.0.0  # 环境变量管理

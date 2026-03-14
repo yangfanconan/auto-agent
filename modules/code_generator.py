@@ -1,19 +1,24 @@
 """
 代码生成模块
 调用 opencode/qwencode 等工具自动编写代码
+
+增强版：支持项目结构生成、代码审查、多文件生成
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
+import os
 
 try:
     from ..utils import get_logger, CodeGenerationException
     from ..adapters import get_tool, OpencodeAdapter, QwencodeAdapter
+    from ..core.task_parser import PROJECT_TEMPLATES
 except ImportError:
     from utils import get_logger, CodeGenerationException
     from adapters import get_tool, OpencodeAdapter, QwencodeAdapter
+    from core.task_parser import PROJECT_TEMPLATES
 
 
 @dataclass
@@ -70,13 +75,202 @@ class CodeGenerator:
     def __init__(self, workspace: str = "."):
         self.logger = get_logger()
         self.workspace = Path(workspace)
-        
+
         # 获取工具适配器
         self.opencode = get_tool("opencode")
         self.qwencode = get_tool("qwencode")
-        
+
         # 生成的文件记录
         self._generated_files: List[CodeFile] = []
+    
+    def initialize_project_structure(self, project_type: str, project_name: Optional[str] = None) -> CodeGenerationResult:
+        """
+        初始化项目结构
+        
+        Args:
+            project_type: 项目类型 (python_package/web_api/cli_tool 等)
+            project_name: 项目名称
+        
+        Returns:
+            CodeGenerationResult: 生成结果
+        """
+        self.logger.info(f"初始化项目结构：{project_type}")
+        
+        result = CodeGenerationResult(success=False)
+        
+        if project_type not in PROJECT_TEMPLATES:
+            result.errors.append(f"未知的项目类型：{project_type}")
+            return result
+        
+        template = PROJECT_TEMPLATES[project_type]
+        project_name = project_name or f"project_{datetime.now().strftime('%Y%m%d')}"
+        
+        try:
+            created_files = []
+            
+            # 创建项目目录结构
+            for item in template["structure"]:
+                # 判断是文件还是目录
+                if item.endswith('/'):
+                    # 创建目录
+                    dir_path = self.workspace / project_name / item.rstrip('/')
+                    dir_path.mkdir(parents=True, exist_ok=True)
+                    self.logger.debug(f"创建目录：{dir_path}")
+                else:
+                    # 创建文件
+                    file_path = self.workspace / project_name / item
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # 生成文件内容
+                    content = self._generate_boilerplate_content(item, project_name, project_type)
+                    if content:
+                        with open(file_path, 'w', encoding='utf-8') as f:
+                            f.write(content)
+                        created_files.append(str(file_path))
+                        self.logger.debug(f"创建文件：{file_path}")
+            
+            result.success = True
+            result.files = [
+                CodeFile(path=path, content="", language="text", description="项目文件")
+                for path in created_files
+            ]
+            result.metadata["project_name"] = project_name
+            result.metadata["project_type"] = project_type
+            
+            self.logger.info(f"项目结构初始化完成：{project_name}")
+            
+        except Exception as e:
+            result.errors.append(f"项目结构初始化失败：{e}")
+            self.logger.error(f"项目结构初始化失败：{e}")
+        
+        return result
+    
+    def _generate_boilerplate_content(self, file_path: str, project_name: str, project_type: str) -> Optional[str]:
+        """生成样板文件内容"""
+        
+        if file_path == "README.md":
+            return f"""# {project_name}
+
+## 项目简介
+
+{PROJECT_TEMPLATES.get(project_type, {}).get('description', '自动生成项目')}
+
+## 安装
+
+```bash
+pip install -r requirements.txt
+```
+
+## 使用
+
+```bash
+python -m src.main
+```
+
+## 开发
+
+## 测试
+
+```bash
+pytest
+```
+
+## 许可证
+
+MIT
+"""
+        
+        elif file_path == "requirements.txt":
+            if project_type in ["web_api", "flask", "fastapi"]:
+                return """fastapi>=0.104.0
+uvicorn>=0.24.0
+pydantic>=2.0.0
+"""
+            return """# 添加项目依赖
+"""
+        
+        elif file_path == "setup.py":
+            return f'''"""
+{project_name} setup.py
+"""
+from setuptools import setup, find_packages
+
+setup(
+    name="{project_name}",
+    version="0.1.0",
+    packages=find_packages(where="src"),
+    package_dir={{"": "src"}},
+    install_requires=[
+        # 添加依赖
+    ],
+    python_requires=">=3.8",
+)
+'''
+        
+        elif file_path == ".gitignore":
+            return """__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.env
+.venv
+"""
+        
+        elif file_path.endswith("__init__.py"):
+            return f'"""\\n{project_name} module\\n"""\\n'
+        
+        elif file_path == "src/main.py":
+            if project_type == "cli_tool":
+                return '''"""
+命令行工具主入口
+"""
+import argparse
+
+def main():
+    parser = argparse.ArgumentParser(description="命令行工具")
+    parser.add_argument("command", help="要执行的命令")
+    parser.add_argument("--verbose", "-v", action="store_true", help="详细输出")
+    args = parser.parse_args()
+    
+    print(f"执行命令：{args.command}")
+    if args.verbose:
+        print("详细模式已启用")
+
+if __name__ == "__main__":
+    main()
+'''
+            return '''"""
+主入口模块
+"""
+
+def main():
+    """主函数"""
+    print("Hello, World!")
+
+if __name__ == "__main__":
+    main()
+'''
+        
+        return None
     
     def generate(
         self,
@@ -356,21 +550,121 @@ module.exports = {{ main }};
         except Exception as e:
             result.errors.append(str(e))
             self.logger.error(f"代码重构失败：{e}")
+
+        return result
+    
+    def review_code(
+        self,
+        code: str,
+        language: str = "python",
+        review_aspects: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        代码审查
+        
+        Args:
+            code: 待审查的代码
+            language: 编程语言
+            review_aspects: 审查方面 (style/security/performance/maintainability)
+        
+        Returns:
+            Dict: 审查结果
+        """
+        self.logger.info(f"开始代码审查")
+        
+        review_aspects = review_aspects or ["style", "security", "performance", "maintainability"]
+        
+        result = {
+            "success": False,
+            "issues": [],
+            "suggestions": [],
+            "score": 0,
+            "details": {}
+        }
+        
+        try:
+            # 使用 opencode 进行代码审查
+            if self.opencode:
+                aspects_str = ", ".join(review_aspects)
+                prompt = f"""请对以下{language}代码进行审查，重点关注：{aspects_str}
+
+代码：
+```{language}
+{code}
+```
+
+请按以下格式返回审查结果：
+1. 发现的问题（按严重程度排序）
+2. 改进建议
+3. 总体评分（0-100）
+"""
+                
+                review_result = self.opencode.call(prompt)
+                
+                if review_result.success:
+                    result["success"] = True
+                    result["review"] = review_result.output
+                    result["details"]["raw_review"] = review_result.output
+            
+            # 基础静态分析（降级方案）
+            if not result["success"]:
+                result = self._basic_static_analysis(code, language, result)
+            
+        except Exception as e:
+            result["errors"] = [str(e)]
+            self.logger.error(f"代码审查失败：{e}")
         
         return result
     
+    def _basic_static_analysis(self, code: str, language: str, result: Dict) -> Dict:
+        """基础静态分析（降级方案）"""
+        
+        if language != "python":
+            return result
+        
+        issues = []
+        suggestions = []
+        
+        lines = code.split('\n')
+        
+        # 检查项
+        checks = [
+            (len(code) > 10000, "代码过长，建议拆分为多个模块", "将代码拆分为更小的模块"),
+            (any(len(line) > 120 for line in lines), "存在过长的行（>120 字符）", "使用黑色规范拆分长行"),
+            ("import *" in code, "使用了通配符导入", "使用显式导入"),
+            ("eval(" in code or "exec(" in code, "使用了 eval/exec，存在安全风险", "避免使用 eval/exec"),
+            ("# TODO" in code or "# FIXME" in code, "存在待办事项注释", "完成待办事项"),
+            (not any(line.strip().startswith('"""') or "'''" in line for line in lines), "缺少文档字符串", "为函数和类添加文档字符串"),
+        ]
+        
+        score = 100
+        for condition, issue, suggestion in checks:
+            if condition:
+                issues.append(issue)
+                suggestions.append(suggestion)
+                score -= 10
+        
+        result["success"] = True
+        result["issues"] = issues
+        result["suggestions"] = suggestions
+        result["score"] = max(0, score)
+        result["details"]["language"] = language
+        result["details"]["lines_of_code"] = len(lines)
+        
+        return result
+
     def get_generated_files(self) -> List[CodeFile]:
         """获取已生成的文件列表"""
         return self._generated_files
-    
+
     def generate_task(self, plan_id: str, subtask) -> str:
         """
         任务处理器接口
-        
+
         Args:
             plan_id: 计划 ID
             subtask: 子任务
-        
+
         Returns:
             str: 执行结果
         """
@@ -379,13 +673,19 @@ module.exports = {{ main }};
             language = subtask.metadata.get("language", "python")
             output_dir = subtask.metadata.get("output_dir")
             
-            result = self.generate(description, language, output_dir)
-            
+            # 检查是否是项目初始化任务
+            if subtask.task_type.value == "project_init":
+                project_type = subtask.metadata.get("project_type", "python_package")
+                project_name = subtask.metadata.get("project_name")
+                result = self.initialize_project_structure(project_type, project_name)
+            else:
+                result = self.generate(description, language, output_dir)
+
             if result.success:
                 files_info = "\n".join([f"  - {f.path}" for f in result.files])
                 return f"代码生成成功\n\n生成的文件:\n{files_info}"
             else:
                 return f"代码生成失败：{', '.join(result.errors)}"
-                
+
         except Exception as e:
             raise CodeGenerationException(f"代码生成失败：{e}")

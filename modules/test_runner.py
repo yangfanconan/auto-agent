@@ -1,11 +1,14 @@
 """
 自动化测试模块
 编写测试用例、执行测试、生成报告
+
+增强版：改进覆盖率解析、智能修复失败测试
 """
 
 import subprocess
 import sys
 import json
+import os
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
@@ -254,45 +257,71 @@ def test_placeholder():
         return report
     
     def _parse_test_output(self, stdout: str, stderr: str) -> TestReport:
-        """解析测试输出"""
+        """解析测试输出（增强版）"""
         report = TestReport()
-        
-        # 简单解析 pytest 输出
+
+        # 尝试解析 JSON 报告文件
+        json_report_path = Path(self.workspace) / ".pytest_cache" / ".report.json"
+        if json_report_path.exists():
+            try:
+                with open(json_report_path, 'r') as f:
+                    data = json.load(f)
+                    report.total = data.get("summary", {}).get("num_tests", 0)
+                    report.passed = data.get("summary", {}).get("passed", 0)
+                    report.failed = data.get("summary", {}).get("failed", 0)
+                    report.skipped = data.get("summary", {}).get("skipped", 0)
+                    report.coverage = data.get("coverage", {}).get("percent_covered", 0.0)
+                    return report
+            except Exception as e:
+                self.logger.debug(f"解析 JSON 报告失败：{e}")
+
+        # 解析终端输出
         lines = stdout.split('\n')
-        
+        failed_errors = []
+        in_error = False
+        current_error = ""
+
         for line in lines:
+            # 解析测试结果
             if 'PASSED' in line:
                 report.passed += 1
                 report.total += 1
             elif 'FAILED' in line:
                 report.failed += 1
                 report.total += 1
+                in_error = True
+                current_error = line
             elif 'SKIPPED' in line:
                 report.skipped += 1
+            
+            # 收集错误信息
+            if in_error:
+                current_error += "\n" + line
+                if line.strip() and not line.startswith(' '):
+                    failed_errors.append(current_error.strip())
+                    in_error = False
+                    current_error = ""
         
-        # 尝试解析覆盖率
-        for line in lines:
-            if 'TOTAL' in line and '%' in line:
-                try:
-                    coverage_str = line.split('%')[-2].strip()
-                    report.coverage = float(coverage_str)
-                except (ValueError, IndexError):
-                    pass
-        
-        # 如果没有解析到测试，尝试从总结行解析
+        # 从总结行解析
         for line in lines:
             if 'passed' in line and 'failed' in line:
                 import re
                 passed_match = re.search(r'(\d+) passed', line)
                 failed_match = re.search(r'(\d+) failed', line)
-                
+                skipped_match = re.search(r'(\d+) skipped', line)
+
                 if passed_match:
-                    report.passed = int(passed_match.group(1))
+                    report.passed = max(report.passed, int(passed_match.group(1)))
                 if failed_match:
-                    report.failed = int(failed_match.group(1))
-                
-                report.total = report.passed + report.failed
-        
+                    report.failed = max(report.failed, int(failed_match.group(1)))
+                if skipped_match:
+                    report.skipped = max(report.skipped, int(skipped_match.group(1)))
+
+        # 解析覆盖率 - 改进版
+        coverage = self._parse_coverage_from_output(stdout, stderr)
+        if coverage > 0:
+            report.coverage = coverage
+
         # 确保总数正确
         if report.total == 0:
             report.total = report.passed + report.failed + report.skipped
@@ -302,7 +331,55 @@ def test_placeholder():
                 report.passed = 1
                 report.coverage = 0.0
         
+        # 保存错误详情
+        if failed_errors:
+            report.errors.extend(failed_errors[:5])  # 限制保存前 5 个错误
+
         return report
+    
+    def _parse_coverage_from_output(self, stdout: str, stderr: str) -> float:
+        """从输出中解析覆盖率（增强版）"""
+        import re
+        
+        # 合并输出
+        full_output = stdout + stderr
+        
+        # 方法 1: 解析 pytest-cov 的表格输出
+        # 查找 TOTAL 行
+        for line in full_output.split('\n'):
+            if 'TOTAL' in line and '%' in line:
+                # 尝试匹配覆盖率数字
+                match = re.search(r'(\d+\.?\d*)%', line)
+                if match:
+                    return float(match.group(1))
+        
+        # 方法 2: 解析覆盖率 JSON 文件
+        coverage_json_paths = [
+            Path(self.workspace) / "coverage.json",
+            Path(self.workspace) / ".coverage.json",
+            Path(self.workspace) / "htmlcov" / "coverage.json",
+        ]
+        
+        for json_path in coverage_json_paths:
+            if json_path.exists():
+                try:
+                    with open(json_path, 'r') as f:
+                        data = json.load(f)
+                        if 'totals' in data and 'percent_covered' in data['totals']:
+                            return float(data['totals']['percent_covered'])
+                except Exception:
+                    continue
+        
+        # 方法 3: 解析 .coverage 文件（需要 coverage 包）
+        try:
+            import coverage
+            cov = coverage.Coverage()
+            cov.load()
+            return cov.report()
+        except Exception:
+            pass
+        
+        return 0.0
     
     def fix_tests(self, report: TestReport, code_path: str) -> bool:
         """

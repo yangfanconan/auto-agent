@@ -1,8 +1,8 @@
-# Auto-Agent 配置文件
+# Auto-Agent 配置文件 (v2.0)
 
 # 基本配置
 name: auto-agent
-version: 1.0.0
+version: 2.0.0
 workspace: ""  # 空表示使用当前目录
 
 # Opencode 配置
@@ -25,6 +25,8 @@ git:
   auto_push: false
   branch_prefix: feature
   commit_template: "{type}: {description}"
+  # 智能提交配置
+  smart_commit: true  # 自动生成提交信息
 
 # 测试配置
 test:
@@ -32,6 +34,8 @@ test:
   coverage_threshold: 90.0  # 覆盖率目标（%）
   test_framework: pytest
   timeout: 600
+  # 智能修复配置
+  auto_fix: true  # 自动修复失败测试
 
 # 环境配置
 environment:
@@ -39,6 +43,10 @@ environment:
   node_version: "22"
   auto_install: true
   check_ports: true
+  # 虚拟环境配置
+  venv:
+    auto_create: true  # 自动创建虚拟环境
+    path: ".venv"  # 虚拟环境路径
 
 # 日志配置
 log:
@@ -46,3 +54,17 @@ log:
   save_json: true
   max_file_size: 10485760  # 10MB
   backup_count: 5
+
+# UI 配置
+ui:
+  theme: default  # default, dark, light, monokai
+  rich_output: true  # 使用 Rich 美化输出
+  progress_bar: true  # 显示进度条
+
+# 知识库配置
+knowledge:
+  auto_index: true  # 自动索引项目
+  index_patterns:  # 索引文件模式
+    - "**/*.py"
+    - "**/*.js"
+    - "**/*.ts"

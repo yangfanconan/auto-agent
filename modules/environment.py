@@ -1,11 +1,14 @@
 """
 环境自动化模块
 扫描、检测、修复运行环境
+
+增强版：虚拟环境管理、Docker 支持
 """
 
 import subprocess
 import sys
 import platform
+import venv
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
@@ -58,12 +61,181 @@ class EnvironmentReport:
 
 
 class EnvironmentManager:
-    """环境管理器"""
-    
+    """环境管理器（增强版）"""
+
     def __init__(self, workspace: str = "."):
         self.logger = get_logger()
         self.workspace = Path(workspace)
         self._report: Optional[EnvironmentReport] = None
+    
+    def create_venv(
+        self,
+        venv_path: Optional[str] = None,
+        python_version: Optional[str] = None,
+        with_pip: bool = True
+    ) -> bool:
+        """
+        创建虚拟环境
+        
+        Args:
+            venv_path: 虚拟环境路径（默认：./.venv）
+            python_version: Python 版本（可选）
+            with_pip: 是否安装 pip
+        
+        Returns:
+            bool: 是否创建成功
+        """
+        venv_path = Path(venv_path) if venv_path else self.workspace / ".venv"
+        
+        try:
+            self.logger.info(f"创建虚拟环境：{venv_path}")
+            
+            # 创建虚拟环境
+            builder = venv.EnvBuilder(
+                system_site_packages=False,
+                clear=False,
+                symlinks=False,
+                with_pip=with_pip,
+            )
+            builder.create(str(venv_path))
+            
+            # 验证创建
+            pip_path = venv_path / "bin" / "pip" if platform.system() != "Windows" else venv_path / "Scripts" / "pip.exe"
+            if pip_path.exists():
+                self.logger.info(f"虚拟环境创建成功：{venv_path}")
+                return True
+            else:
+                self.logger.warning(f"虚拟环境已创建但未找到 pip: {venv_path}")
+                return True
+        
+        except Exception as e:
+            self.logger.error(f"创建虚拟环境失败：{e}")
+            return False
+    
+    def check_venv(self, venv_path: Optional[str] = None) -> bool:
+        """检查虚拟环境是否存在"""
+        venv_path = Path(venv_path) if venv_path else self.workspace / ".venv"
+        
+        if platform.system() != "Windows":
+            python_path = venv_path / "bin" / "python"
+            pip_path = venv_path / "bin" / "pip"
+        else:
+            python_path = venv_path / "Scripts" / "python.exe"
+            pip_path = venv_path / "Scripts" / "pip.exe"
+        
+        return python_path.exists() and pip_path.exists()
+    
+    def install_requirements(
+        self,
+        requirements_path: Optional[str] = None,
+        venv_path: Optional[str] = None
+    ) -> bool:
+        """
+        安装依赖
+        
+        Args:
+            requirements_path: requirements.txt 路径
+            venv_path: 虚拟环境路径
+        
+        Returns:
+            bool: 是否安装成功
+        """
+        requirements_path = Path(requirements_path) if requirements_path else self.workspace / "requirements.txt"
+        
+        if not requirements_path.exists():
+            self.logger.warning(f"requirements.txt 不存在：{requirements_path}")
+            return False
+        
+        try:
+            # 确定 pip 路径
+            if venv_path:
+                venv = Path(venv_path)
+                pip_path = venv / "bin" / "pip" if platform.system() != "Windows" else venv / "Scripts" / "pip.exe"
+            else:
+                pip_path = Path(sys.executable).parent / "pip"
+            
+            if not pip_path.exists():
+                pip_path = Path("pip")  # 回退到系统 pip
+            
+            self.logger.info(f"安装依赖：{requirements_path}")
+            
+            result = subprocess.run(
+                [str(pip_path), "install", "-r", str(requirements_path), "-q"],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                cwd=str(self.workspace)
+            )
+            
+            if result.returncode == 0:
+                self.logger.info("依赖安装成功")
+                return True
+            else:
+                self.logger.error(f"依赖安装失败：{result.stderr}")
+                return False
+        
+        except Exception as e:
+            self.logger.error(f"安装依赖异常：{e}")
+            return False
+    
+    def check_docker_support(self) -> bool:
+        """检查 Docker 支持"""
+        try:
+            result = subprocess.run(
+                ["docker", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
+    
+    def run_in_docker(
+        self,
+        image: str,
+        command: str,
+        volumes: Optional[List[str]] = None
+    ) -> Tuple[bool, str]:
+        """
+        在 Docker 容器中运行命令
+        
+        Args:
+            image: Docker 镜像
+            command: 要执行的命令
+            volumes: 挂载卷列表
+        
+        Returns:
+            Tuple[bool, str]: (成功与否，输出)
+        """
+        try:
+            cmd = ["docker", "run", "--rm"]
+            
+            # 添加卷挂载
+            if volumes:
+                for vol in volumes:
+                    cmd.extend(["-v", vol])
+            
+            # 添加工作目录
+            cmd.extend(["-w", "/workspace"])
+            
+            # 添加镜像和命令
+            cmd.extend([image, "bash", "-c", command])
+            
+            self.logger.info(f"在 Docker 中执行：{' '.join(cmd)}")
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=600,
+                cwd=str(self.workspace)
+            )
+            
+            return result.returncode == 0, result.stdout
+        
+        except Exception as e:
+            return False, str(e)
     
     def scan(self) -> EnvironmentReport:
         """
