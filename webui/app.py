@@ -367,6 +367,19 @@ def register_routes(app: FastAPI):
         event_bus.subscribe_async(EventType.TASK_COMPLETED, on_task_event)
         event_bus.subscribe_async(EventType.TASK_FAILED, on_task_event)
         
+        # 订阅日志事件
+        async def on_log_event(event):
+            """日志事件处理器"""
+            try:
+                await websocket.send_json({
+                    "type": "log",
+                    "payload": event.payload,
+                })
+            except:
+                pass
+        
+        event_bus.subscribe_async("system.log", on_log_event)
+        
         try:
             # 发送初始状态
             if task_id in tasks:
@@ -409,6 +422,14 @@ def register_routes(app: FastAPI):
             "events": [e.to_dict() for e in events],
             "stats": event_bus.get_stats(),
         }
+    
+    @app.get("/api/logs")
+    async def get_logs(limit: int = 100):
+        """获取最近日志"""
+        from utils.logger import get_logger
+        logger = get_logger()
+        logs = logger.get_recent_logs(limit)
+        return {"logs": logs}
     
     # ============ 项目管理 API ============
     
@@ -978,6 +999,20 @@ def get_html_content() -> str:
             
             ws.onmessage = (event) => {
                 const data = JSON.parse(event.data);
+                
+                // 处理日志消息
+                if (data.type === 'log') {
+                    const log = data.payload;
+                    const typeMap = {
+                        'ERROR': 'error',
+                        'WARNING': 'warning',
+                        'INFO': 'info',
+                        'DEBUG': 'info',
+                    };
+                    addLog(`[${log.time || new Date(log.timestamp * 1000).toLocaleTimeString()}] ${log.message}`, typeMap[log.level] || 'info');
+                    return;
+                }
+                
                 if (data.type === 'heartbeat') return;
                 
                 // 更新任务状态
@@ -1065,6 +1100,39 @@ def get_html_content() -> str:
                 output.scrollTop = output.scrollHeight;
             } catch (error) {
                 console.error('加载事件失败:', error);
+            }
+        }
+
+        // 加载日志
+        async function loadLogs() {
+            try {
+                const response = await fetch('/api/logs?limit=50');
+                const data = await response.json();
+                
+                const output = document.getElementById('logOutput');
+                const logs = data.logs;
+                
+                if (logs.length === 0) return;
+                
+                const logHtml = logs.map(log => {
+                    const time = log.time || new Date(log.timestamp * 1000).toLocaleTimeString();
+                    const typeMap = {
+                        'ERROR': 'log-error',
+                        'WARNING': 'log-warning',
+                        'INFO': 'log-info',
+                        'DEBUG': 'log-info',
+                    };
+                    const className = typeMap[log.level] || 'log-info';
+                    return `<div class="log-line ${className}">[${time}] ${log.message}</div>`;
+                }).join('');
+                
+                // 如果有日志，替换事件显示（事件和日志二选一）
+                if (logs.length > 0) {
+                    output.innerHTML = logHtml;
+                    output.scrollTop = output.scrollHeight;
+                }
+            } catch (error) {
+                console.error('加载日志失败:', error);
             }
         }
 
@@ -1419,6 +1487,7 @@ def get_html_content() -> str:
         loadWorkspaces();  // 加载工作目录
         loadProjects();    // 加载项目
         loadTasks();
+        loadLogs();        // 加载日志
         loadEvents();
         addLog('Web UI 已就绪，WebSocket 实时推送已启用', 'success');
     </script>
