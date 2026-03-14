@@ -222,30 +222,53 @@ def main():
   # 检查环境
   python main.py --check
 
+  # 启动 Web UI
+  python main.py --webui
+
   # 指定工作空间
   python main.py --workspace /path/to/project
         """
     )
-    
+
     parser.add_argument(
         "--workspace", "-w",
         type=str,
         default=".",
         help="工作空间路径（默认：当前目录）"
     )
-    
+
     parser.add_argument(
         "--command", "-c",
         type=str,
         help="执行单个任务命令"
     )
-    
+
     parser.add_argument(
         "--check",
         action="store_true",
         help="检查环境并退出"
     )
-    
+
+    parser.add_argument(
+        "--webui",
+        action="store_true",
+        help="启动 Web UI 界面"
+    )
+
+    parser.add_argument(
+        "--host",
+        type=str,
+        default="0.0.0.0",
+        help="Web UI 监听地址（默认：0.0.0.0）"
+    )
+
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Web UI 端口（默认：8000）"
+    )
+
     parser.add_argument(
         "--config",
         type=str,
@@ -276,20 +299,45 @@ def main():
     
     # 打印工具状态
     print_tools_status()
-    
+
     # 环境检查模式
     if args.check:
         check_environment(args.workspace)
         return 0
-    
+
+    # Web UI 模式
+    if args.webui:
+        return run_webui(args.host, args.port)
+
     # 命令模式
     if args.command:
         return run_command_mode(args.command, args.workspace, config)
-    
+
     # 交互模式（默认）
     run_interactive_mode(args.workspace, config)
-    
+
     return 0
+
+
+def run_webui(host: str, port: int):
+    """运行 Web UI"""
+    try:
+        import uvicorn
+        from webui import app
+        
+        print(f"\n🌐 Web UI 已启动!")
+        print(f"   访问地址：http://{host}:{port}")
+        print(f"   按 Ctrl+C 停止\n")
+        
+        uvicorn.run(app, host=host, port=port, log_level="info")
+        return 0
+    except ImportError:
+        print("\n❌ 错误：缺少 Web UI 依赖")
+        print("   请运行：pip install fastapi uvicorn")
+        return 1
+    except Exception as e:
+        print(f"\n❌ Web UI 启动失败：{e}")
+        return 1
 
 
 if __name__ == "__main__":
