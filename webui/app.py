@@ -219,6 +219,85 @@ def register_routes(app: FastAPI):
             "test_auto_test": config.test.auto_test,
         }
     
+    @app.get("/api/workspaces")
+    async def get_workspaces():
+        """获取可用工作目录列表"""
+        import os
+        from pathlib import Path
+        
+        # 预定义常用工作目录
+        common_workspaces = [
+            {"name": "当前目录", "path": str(Path.cwd())},
+            {"name": "用户目录", "path": str(Path.home())},
+            {"name": "桌面", "path": str(Path.home() / "Desktop")},
+            {"name": "文档", "path": str(Path.home() / "Documents")},
+            {"name": "代码目录", "path": str(Path.home() / "Codes")},
+        ]
+        
+        # 扫描用户目录下的代码项目
+        codes_dir = Path.home() / "Codes"
+        if codes_dir.exists():
+            for item in codes_dir.iterdir():
+                if item.is_dir() and not item.name.startswith('.'):
+                    # 检查是否是项目目录
+                    is_project = (
+                        (item / ".git").exists() or
+                        (item / "requirements.txt").exists() or
+                        (item / "package.json").exists() or
+                        (item / "setup.py").exists()
+                    )
+                    if is_project:
+                        common_workspaces.append({
+                            "name": f"📁 {item.name}",
+                            "path": str(item),
+                        })
+        
+        # 检查 Documents 下的项目
+        docs_dir = Path.home() / "Documents"
+        if docs_dir.exists():
+            for item in docs_dir.iterdir():
+                if item.is_dir() and not item.name.startswith('.'):
+                    is_project = (item / ".git").exists()
+                    if is_project:
+                        common_workspaces.append({
+                            "name": f"📁 {item.name}",
+                            "path": str(item),
+                        })
+        
+        return {"workspaces": common_workspaces}
+    
+    @app.get("/api/filesystem/ls")
+    async def list_directory(path: str = "~"):
+        """列出目录内容"""
+        try:
+            target_path = Path(path).expanduser()
+            if not target_path.exists():
+                return {"error": "目录不存在"}
+            
+            items = []
+            for item in sorted(target_path.iterdir()):
+                if item.name.startswith('.') and item.is_dir():
+                    continue  # 跳过隐藏目录
+                
+                item_type = "directory" if item.is_dir() else "file"
+                items.append({
+                    "name": item.name,
+                    "path": str(item),
+                    "type": item_type,
+                    "is_project": item.is_dir() and (
+                        (item / ".git").exists() or
+                        (item / "requirements.txt").exists() or
+                        (item / "package.json").exists()
+                    ),
+                })
+            
+            return {
+                "current_path": str(target_path),
+                "parent_path": str(target_path.parent) if target_path != target_path.parent else None,
+                "items": items,
+            }
+        except Exception as e:
+            return {"error": str(e)}
     @app.get("/api/tools")
     async def get_tools():
         """获取可用工具"""
@@ -555,8 +634,15 @@ def get_html_content() -> str:
                 <textarea id="taskDescription" placeholder="例如：用 Python 写一个快速排序算法，包含单元测试"></textarea>
             </div>
             <div class="form-group">
-                <label>工作空间</label>
-                <input type="text" id="workspace" value="." placeholder="项目路径">
+                <label>📂 工作目录</label>
+                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                    <select id="workspaceSelect" onchange="onWorkspaceSelect()" style="flex: 1;">
+                        <option value="">选择常用目录...</option>
+                    </select>
+                    <button onclick="browseWorkspace()" style="padding: 12px 16px;">📁 浏览</button>
+                </div>
+                <input type="text" id="workspace" value="." placeholder="或手动输入路径">
+                <div id="workspaceInfo" style="margin-top: 8px; font-size: 13px; color: #888;"></div>
             </div>
             <div class="form-group">
                 <label>🔧 选择工具</label>
@@ -576,6 +662,24 @@ def get_html_content() -> str:
                 </label>
             </div>
             <button onclick="createTask()" style="margin-top: 16px;">🚀 开始执行</button>
+        </div>
+        
+        <!-- 目录浏览对话框 -->
+        <div id="browseDialog" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center;">
+            <div style="background: #1a1a2e; border-radius: 12px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow: auto;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 style="margin: 0;">📁 选择工作目录</h3>
+                    <button onclick="closeBrowseDialog()" style="padding: 4px 12px; background: transparent; border: 1px solid rgba(255,255,255,0.2);">✕</button>
+                </div>
+                <div id="breadcrumb" style="margin-bottom: 16px; color: #00d9ff; font-size: 13px;"></div>
+                <div id="fileList" style="display: flex; flex-direction: column; gap: 8px;">
+                    <!-- 动态生成 -->
+                </div>
+                <div style="margin-top: 16px; display: flex; gap: 8px;">
+                    <button onclick="confirmWorkspace()" style="flex: 1;">确认选择</button>
+                    <button onclick="closeBrowseDialog()" style="flex: 1; background: transparent; border: 1px solid rgba(255,255,255,0.2);">取消</button>
+                </div>
+            </div>
         </div>
         
         <div class="card">
@@ -600,6 +704,122 @@ def get_html_content() -> str:
     <script>
         let tasks = {};
         let wsConnections = {};
+        let selectedWorkspace = ".";
+        let currentBrowsePath = "~";
+        
+        // 加载工作目录列表
+        async function loadWorkspaces() {
+            try {
+                const response = await fetch('/api/workspaces');
+                const data = await response.json();
+                const select = document.getElementById('workspaceSelect');
+                
+                select.innerHTML = '<option value="">选择常用目录...</option>' + 
+                    data.workspaces.map(w => `
+                        <option value="${w.path}">${w.name}</option>
+                    `).join('');
+                
+                if (data.workspaces.length > 0) {
+                    document.getElementById('workspaceInfo').innerHTML = 
+                        `发现 ${data.workspaces.length} 个工作目录`;
+                }
+            } catch (error) {
+                console.error('加载工作目录失败:', error);
+            }
+        }
+        
+        // 工作目录选择
+        function onWorkspaceSelect() {
+            const select = document.getElementById('workspaceSelect');
+            if (select.value) {
+                document.getElementById('workspace').value = select.value;
+                selectedWorkspace = select.value;
+            }
+        }
+        
+        // 浏览目录
+        async function browseWorkspace() {
+            document.getElementById('browseDialog').style.display = 'flex';
+            currentBrowsePath = document.getElementById('workspace').value || "~";
+            await loadDirectory(currentBrowsePath);
+        }
+        
+        // 关闭浏览对话框
+        function closeBrowseDialog() {
+            document.getElementById('browseDialog').style.display = 'none';
+        }
+        
+        // 加载目录内容
+        async function loadDirectory(path) {
+            try {
+                const response = await fetch(`/api/filesystem/ls?path=${encodeURIComponent(path)}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    document.getElementById('fileList').innerHTML = 
+                        `<div style="color: #ff4757;">${data.error}</div>`;
+                    return;
+                }
+                
+                currentBrowsePath = data.current_path;
+                
+                // 更新面包屑
+                document.getElementById('breadcrumb').textContent = data.current_path;
+                
+                // 生成文件列表
+                const items = data.items;
+                const fileList = document.getElementById('fileList');
+                
+                let html = '';
+                
+                // 父目录
+                if (data.parent_path) {
+                    html += `
+                        <div onclick="loadDirectory('${data.parent_path}')" 
+                             style="padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                            <span>📁</span>
+                            <span>.. (父目录)</span>
+                        </div>
+                    `;
+                }
+                
+                // 目录
+                items.filter(i => i.type === 'directory').forEach(item => {
+                    const icon = item.is_project ? '📦' : '📁';
+                    html += `
+                        <div onclick="loadDirectory('${item.path}')" 
+                             style="padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                            <span>${icon}</span>
+                            <span>${item.name}</span>
+                            ${item.is_project ? '<span style="font-size: 11px; color: #00d9ff; margin-left: auto;">项目</span>' : ''}
+                        </div>
+                    `;
+                });
+                
+                // 文件
+                items.filter(i => i.type === 'file').slice(0, 50).forEach(item => {
+                    html += `
+                        <div style="padding: 12px; background: rgba(255,255,255,0.02); border-radius: 8px; display: flex; align-items: center; gap: 8px; color: #888;">
+                            <span>📄</span>
+                            <span>${item.name}</span>
+                        </div>
+                    `;
+                });
+                
+                fileList.innerHTML = html;
+                
+            } catch (error) {
+                console.error('加载目录失败:', error);
+            }
+        }
+        
+        // 确认选择
+        function confirmWorkspace() {
+            document.getElementById('workspace').value = currentBrowsePath;
+            selectedWorkspace = currentBrowsePath;
+            closeBrowseDialog();
+            addLog(`已选择工作目录：${currentBrowsePath}`, 'info');
+        }
         
         // 创建 WebSocket 连接
         function connectWebSocket(taskId) {
@@ -842,6 +1062,7 @@ def get_html_content() -> str:
         
         // 初始加载
         loadTools();
+        loadWorkspaces();  // 加载工作目录
         loadTasks();
         loadEvents();
         addLog('Web UI 已就绪，WebSocket 实时推送已启用', 'success');
