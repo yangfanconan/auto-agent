@@ -669,10 +669,11 @@ module.exports = {{ main }};
             str: 执行结果
         """
         try:
-            description = subtask.description
+            # 获取任务描述（确保是字符串）
+            description = str(subtask.description) if subtask.description else f"生成{subtask.name}"
             language = subtask.metadata.get("language", "python")
             output_dir = subtask.metadata.get("output_dir")
-            
+
             # 检查是否是项目初始化任务
             if subtask.task_type.value == "project_init":
                 project_type = subtask.metadata.get("project_type", "python_package")

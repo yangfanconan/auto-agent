@@ -1,11 +1,11 @@
 """
-Qwencode 工具适配器
-支持调用 qwencode 进行批量代码生成、格式化、编码优化等
+Qwencode/Qwen 工具适配器
+支持调用 qwencode/qwen 进行代码生成、格式化、编码优化等
 """
 
 import subprocess
 from pathlib import Path
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Tuple
 from dataclasses import dataclass
 
 try:
@@ -25,47 +25,46 @@ class QwencodeResult:
 
 
 class QwencodeAdapter:
-    """Qwencode 工具适配器"""
-    
-    # 支持的编码格式
-    SUPPORTED_ENCODINGS = ["utf-8", "gbk", "gb2312", "latin-1", "ascii"]
-    
+    """Qwencode/Qwen 工具适配器"""
+
     # 支持的操作类型
     SUPPORTED_OPERATIONS = ["format", "generate", "optimize", "convert", "escape"]
-    
+
     def __init__(self, config: Optional[ToolConfig] = None):
         self.config = config or ToolConfig()
         self.logger = get_logger()
         self._path: Optional[Path] = None
         self._version: Optional[str] = None
-        
-        # 自动检测 qwencode 路径
+
+        # 自动检测路径
         self._detect_path()
-    
+
     def _detect_path(self):
-        """检测 qwencode 安装路径"""
+        """检测 qwencode/qwen 安装路径"""
         # 优先使用配置路径
         if self.config.path:
             path = Path(self.config.path)
             if path.exists():
                 self._path = path
-                self.logger.info(f"使用配置的 qwencode 路径：{self._path}")
+                self.logger.info(f"使用配置的工具路径：{self._path}")
                 return
-        
-        # 检测常见路径
-        common_paths = [
-            Path.home() / ".qwencode" / "bin" / "qwencode",
-            Path("/usr/local/bin/qwencode"),
-            Path("/opt/homebrew/bin/qwencode"),
-        ]
-        
-        for path in common_paths:
-            if path.exists():
-                self._path = path
-                self.logger.info(f"检测到 qwencode: {self._path}")
+
+        # 尝试从 PATH 查找 qwen（优先）
+        try:
+            result = subprocess.run(
+                ["which", "qwen"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                self._path = Path(result.stdout.strip())
+                self.logger.info(f"从 PATH 找到 qwen: {self._path}")
                 return
-        
-        # 尝试从 PATH 查找
+        except Exception:
+            pass
+
+        # 尝试从 PATH 查找 qwencode
         try:
             result = subprocess.run(
                 ["which", "qwencode"],
@@ -79,23 +78,23 @@ class QwencodeAdapter:
                 return
         except Exception:
             pass
-        
-        self.logger.warning("未找到 qwencode 可执行文件，将使用插件模式")
-    
+
+        self.logger.warning("未找到 qwen/qwencode 可执行文件")
+
     @property
     def is_available(self) -> bool:
-        """检查 qwencode 是否可用"""
+        """检查工具是否可用"""
         return self._path is not None and self._path.exists()
-    
+
     @property
     def version(self) -> Optional[str]:
-        """获取 qwencode 版本"""
+        """获取工具版本"""
         if self._version:
             return self._version
-        
+
         if not self.is_available:
             return None
-        
+
         try:
             result = subprocess.run(
                 [str(self._path), "--version"],
@@ -107,259 +106,144 @@ class QwencodeAdapter:
                 self._version = result.stdout.strip()
                 return self._version
         except Exception as e:
-            self.logger.error(f"获取 qwencode 版本失败：{e}")
-        
+            self.logger.error(f"获取版本失败：{e}")
+
         return None
     
-    def _build_command(
-        self,
-        operation: str,
-        input_text: Optional[str] = None,
-        input_file: Optional[str] = None,
-        output_file: Optional[str] = None,
-        options: Optional[Dict] = None
-    ) -> List[str]:
-        """构建命令行参数"""
-        cmd = [str(self._path)]
-        
-        # 添加操作类型
-        if operation in self.SUPPORTED_OPERATIONS:
-            cmd.append(operation)
-        else:
-            raise ValueError(f"不支持的操作类型：{operation}")
-        
-        # 添加选项
-        if options:
-            for key, value in options.items():
-                if len(key) == 1:
-                    cmd.append(f"-{key}")
-                else:
-                    cmd.append(f"--{key}")
-                if value is not True:
-                    cmd.append(str(value))
-        
-        # 添加输入文件
-        if input_file:
-            cmd.extend(["-i", input_file])
-        
-        # 添加输出文件
-        if output_file:
-            cmd.extend(["-o", output_file])
-        
-        return cmd, input_text
-    
+    @property
+    def _is_qwen(self) -> bool:
+        """判断是否是 qwen 命令"""
+        return self._path.name == "qwen" if self._path else True
+
     def call(
         self,
-        operation: str,
-        input_text: Optional[str] = None,
-        input_file: Optional[str] = None,
-        output_file: Optional[str] = None,
+        prompt: str,
         options: Optional[Dict] = None,
         timeout: Optional[int] = None,
         retries: Optional[int] = None
     ) -> QwencodeResult:
         """
-        调用 qwencode 执行任务
-        
+        调用 qwen/qwencode 执行任务
+
         Args:
-            operation: 操作类型 (format/generate/optimize/convert/escape)
-            input_text: 输入文本
-            input_file: 输入文件路径
-            output_file: 输出文件路径
+            prompt: 任务提示词
             options: 额外选项
             timeout: 超时时间（秒）
             retries: 重试次数
-        
+
         Returns:
             QwencodeResult: 调用结果
         """
         timeout = timeout or self.config.timeout
         max_retries = retries or self.config.max_retries
-        
-        if operation not in self.SUPPORTED_OPERATIONS:
-            raise ValueError(f"不支持的操作类型：{operation}")
-        
+
+        if not self.is_available:
+            raise ToolCallException("qwen", "工具不可用", {"path": str(self._path)})
+
         # 构建命令
-        cmd = [str(self._path), operation]
+        is_qwen = self._is_qwen
+        cmd = [str(self._path)]
         
-        # 添加选项
-        if options:
-            for key, value in options.items():
-                cmd.append(f"--{key}")
-                if value is not True:
-                    cmd.append(str(value))
-        
-        # 添加输入文件
-        if input_file:
-            cmd.extend(["--input", input_file])
-        
-        # 添加输出文件
-        if output_file:
-            cmd.extend(["--output", output_file])
-        
-        self.logger.debug(f"执行 qwencode: {' '.join(cmd)}")
-        
+        if is_qwen:
+            # qwen 命令格式：qwen -p "prompt"
+            cmd.append("-p")
+            cmd.append(prompt)
+            
+            # 添加选项
+            if options:
+                if options.get("model"):
+                    cmd.extend(["-m", options["model"]])
+                if options.get("sandbox"):
+                    cmd.append("--sandbox")
+                if options.get("debug"):
+                    cmd.append("--debug")
+        else:
+            # qwencode 命令格式：qwencode generate --prompt "xxx"
+            cmd.append("generate")
+            cmd.extend(["--prompt", prompt])
+            
+            if options:
+                for key, value in options.items():
+                    cmd.append(f"--{key}")
+                    if value is not True:
+                        cmd.append(str(value))
+
+        self.logger.debug(f"执行 {'qwen' if is_qwen else 'qwencode'}: {' '.join(cmd)}")
+
         last_error = ""
         for attempt in range(max_retries + 1):
             try:
                 import time
                 start_time = time.time()
-                
-                # 如果有输入文本，通过 stdin 传递
-                if input_text and not input_file:
-                    result = subprocess.run(
-                        cmd,
-                        input=input_text,
-                        capture_output=True,
-                        text=True,
-                        timeout=timeout
-                    )
-                else:
-                    result = subprocess.run(
-                        cmd,
-                        capture_output=True,
-                        text=True,
-                        timeout=timeout
-                    )
-                
+
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                    cwd=options.get("cwd") if options else None
+                )
+
                 duration = time.time() - start_time
-                
-                qwencode_result = QwencodeResult(
+
+                tool_result = QwencodeResult(
                     success=result.returncode == 0,
                     output=result.stdout,
                     error=result.stderr,
                     exit_code=result.returncode,
                     duration=duration
                 )
-                
-                # 记录工具调用日志
-                self.logger.tool_call(
-                    "qwencode",
-                    {"operation": operation, "options": options},
-                    qwencode_result.output[:500] if qwencode_result.success else qwencode_result.error[:500],
-                    qwencode_result.success
-                )
-                
-                return qwencode_result
-                
+
+                return tool_result
+
             except subprocess.TimeoutExpired:
                 last_error = f"执行超时（{timeout}秒）"
-                self.logger.warning(f"qwencode 调用超时，重试 {attempt + 1}/{max_retries}")
+                self.logger.warning(f"调用超时，重试 {attempt + 1}/{max_retries}")
             except Exception as e:
                 last_error = str(e)
-                self.logger.warning(f"qwencode 调用失败：{e}，重试 {attempt + 1}/{max_retries}")
-        
-        raise ToolCallException("qwencode", last_error, {"operation": operation})
-    
-    def format_code(
+                self.logger.warning(f"调用失败：{e}，重试 {attempt + 1}/{max_retries}")
+
+        raise ToolCallException("qwen", last_error, {"prompt": prompt[:200]})
+
+    def call_interactive(
         self,
-        code: str,
-        language: str = "python",
-        options: Optional[Dict] = None
+        prompt: str,
+        project_dir: Optional[str] = None,
+        timeout: Optional[int] = None
     ) -> QwencodeResult:
-        """
-        格式化代码
-        
-        Args:
-            code: 待格式化的代码
-            language: 编程语言
-            options: 额外选项
-        
-        Returns:
-            QwencodeResult: 格式化后的代码
-        """
-        opts = options or {}
-        opts["lang"] = language
-        return self.call("format", input_text=code, options=opts)
-    
+        """交互式调用"""
+        options = {"cwd": project_dir} if project_dir else {}
+        return self.call(prompt, options=options, timeout=timeout)
+
     def generate_code(
         self,
         description: str,
         language: str = "python",
-        template: Optional[str] = None,
-        output_file: Optional[str] = None
+        project_dir: Optional[str] = None
     ) -> QwencodeResult:
-        """
-        批量生成代码
-        
-        Args:
-            description: 代码功能描述
-            language: 编程语言
-            template: 代码模板
-            output_file: 输出文件路径
-        
-        Returns:
-            QwencodeResult: 生成的代码
-        """
-        options = {"lang": language}
-        if template:
-            options["template"] = template
-        
-        input_text = description
-        return self.call("generate", input_text=input_text, options=options, output_file=output_file)
-    
+        """生成代码"""
+        options = {"cwd": project_dir} if project_dir else {}
+        prompt = f"请用{language}编写以下功能的代码：{description}"
+        return self.call(prompt, options=options)
+
+    def format_code(
+        self,
+        code: str,
+        language: str = "python"
+    ) -> QwencodeResult:
+        """格式化代码"""
+        prompt = f"请格式化以下{language}代码，遵循最佳实践：\n\n```{language}\n{code}\n```"
+        return self.call(prompt)
+
     def optimize_code(
         self,
         code: str,
         language: str = "python",
         level: str = "standard"
     ) -> QwencodeResult:
-        """
-        优化代码
-        
-        Args:
-            code: 待优化的代码
-            language: 编程语言
-            level: 优化级别 (basic/standard/aggressive)
-        
-        Returns:
-            QwencodeResult: 优化后的代码
-        """
-        options = {"lang": language, "level": level}
-        return self.call("optimize", input_text=code, options=options)
-    
-    def convert_encoding(
-        self,
-        text: str,
-        from_encoding: str = "utf-8",
-        to_encoding: str = "gbk"
-    ) -> QwencodeResult:
-        """
-        转换编码
-        
-        Args:
-            text: 待转换的文本
-            from_encoding: 源编码
-            to_encoding: 目标编码
-        
-        Returns:
-            QwencodeResult: 转换后的文本
-        """
-        if from_encoding not in self.SUPPORTED_ENCODINGS:
-            raise ValueError(f"不支持的源编码：{from_encoding}")
-        if to_encoding not in self.SUPPORTED_ENCODINGS:
-            raise ValueError(f"不支持的目标编码：{to_encoding}")
-        
-        options = {"from": from_encoding, "to": to_encoding}
-        return self.call("convert", input_text=text, options=options)
-    
-    def escape_text(
-        self,
-        text: str,
-        escape_type: str = "html"
-    ) -> QwencodeResult:
-        """
-        转义文本
-        
-        Args:
-            text: 待转义的文本
-            escape_type: 转义类型 (html/xml/url/json)
-        
-        Returns:
-            QwencodeResult: 转义后的文本
-        """
-        options = {"type": escape_type}
-        return self.call("escape", input_text=text, options=options)
-    
+        """优化代码"""
+        prompt = f"请优化以下{language}代码（{level}级别），提升性能和可读性：\n\n```{language}\n{code}\n```"
+        return self.call(prompt)
+
     def __repr__(self) -> str:
         return f"QwencodeAdapter(path={self._path}, version={self.version}, available={self.is_available})"

@@ -378,3 +378,154 @@ class TestTaskTracker:
         tracker.fail_plan("non_existent", "error")
         
         assert True
+    
+    @patch('core.task_tracker.get_logger')
+    def test_update_plan_progress(self, mock_get_logger, temp_workspace, sample_task_plan):
+        """测试更新计划进度"""
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
+        
+        tracker = TaskTracker(storage_dir=temp_workspace)
+        tracker.register_plan(sample_task_plan)
+        
+        old_updated_at = sample_task_plan.updated_at
+        tracker._update_plan_progress(sample_task_plan)
+        
+        assert sample_task_plan.updated_at is not None
+        assert sample_task_plan.updated_at != old_updated_at
+    
+    @patch('core.task_tracker.get_logger')
+    def test_subtask_actual_duration_calculation(self, mock_get_logger, temp_workspace, sample_task_plan):
+        """测试子任务实际耗时计算"""
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
+        
+        tracker = TaskTracker(storage_dir=temp_workspace)
+        tracker.register_plan(sample_task_plan)
+        
+        subtask_id = sample_task_plan.subtasks[0].id
+        tracker.start_subtask(sample_task_plan.id, subtask_id)
+        
+        import time
+        time.sleep(0.1)
+        
+        tracker.complete_subtask(sample_task_plan.id, subtask_id, "完成")
+        
+        subtask = tracker._get_subtask(sample_task_plan, subtask_id)
+        assert subtask.actual_duration is not None
+        assert subtask.actual_duration >= 0.1
+    
+    @patch('core.task_tracker.get_logger')
+    def test_add_event_to_non_existent_plan(self, mock_get_logger, temp_workspace):
+        """测试向不存在的计划添加事件"""
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
+        
+        tracker = TaskTracker(storage_dir=temp_workspace)
+        
+        event = TaskEvent(
+            timestamp="2024-01-01T00:00:00",
+            event_type="test",
+            task_id="test",
+            message="测试"
+        )
+        
+        tracker._add_event("non_existent", event)
+        
+        assert "non_existent" not in tracker._events
+    
+    @patch('core.task_tracker.get_logger')
+    def test_load_plan_with_full_data(self, mock_get_logger, temp_workspace, sample_task_plan):
+        """测试加载完整的计划数据"""
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
+        
+        tracker = TaskTracker(storage_dir=temp_workspace)
+        tracker.register_plan(sample_task_plan)
+        
+        subtask_id = sample_task_plan.subtasks[0].id
+        tracker.start_subtask(sample_task_plan.id, subtask_id)
+        tracker.complete_subtask(sample_task_plan.id, subtask_id, "完成")
+        tracker.complete_plan(sample_task_plan.id)
+        
+        new_tracker = TaskTracker(storage_dir=temp_workspace)
+        loaded_plan = new_tracker.load_plan(sample_task_plan.id)
+        
+        assert loaded_plan is not None
+        assert len(loaded_plan.subtasks) == len(sample_task_plan.subtasks)
+        assert loaded_plan.subtasks[0].task_type == sample_task_plan.subtasks[0].task_type
+    
+    @patch('core.task_tracker.get_logger')
+    def test_get_subtask_not_found(self, mock_get_logger, temp_workspace, sample_task_plan):
+        """测试获取不存在的子任务"""
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
+        
+        tracker = TaskTracker(storage_dir=temp_workspace)
+        
+        subtask = tracker._get_subtask(sample_task_plan, "non_existent_id")
+        
+        assert subtask is None
+    
+    @patch('core.task_tracker.get_logger')
+    def test_progress_report_with_failed_subtasks(self, mock_get_logger, temp_workspace, sample_task_plan):
+        """测试包含失败子任务的进度报告"""
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
+        
+        tracker = TaskTracker(storage_dir=temp_workspace)
+        tracker.register_plan(sample_task_plan)
+        
+        subtask_id = sample_task_plan.subtasks[0].id
+        tracker.start_subtask(sample_task_plan.id, subtask_id)
+        tracker.fail_subtask(sample_task_plan.id, subtask_id, "测试失败")
+        
+        report = tracker.get_progress_report(sample_task_plan.id)
+        
+        assert report["failed_count"] == 1
+    
+    @patch('core.task_tracker.get_logger')
+    def test_briefing_with_various_statuses(self, mock_get_logger, temp_workspace, sample_task_plan):
+        """测试各种状态的任务简报"""
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
+        
+        tracker = TaskTracker(storage_dir=temp_workspace)
+        tracker.register_plan(sample_task_plan)
+        
+        sample_task_plan.subtasks[0].status = "completed"
+        sample_task_plan.subtasks[0].progress = 100.0
+        
+        sample_task_plan.subtasks[1].status = "in_progress"
+        sample_task_plan.subtasks[1].progress = 50.0
+        
+        sample_task_plan.subtasks[2].status = "failed"
+        
+        briefing = tracker.generate_briefing(sample_task_plan.id)
+        
+        assert "✅" in briefing
+        assert "🔄" in briefing
+        assert "❌" in briefing
+    
+    @patch('core.task_tracker.get_logger')
+    def test_start_subtask_non_existent_plan(self, mock_get_logger, temp_workspace):
+        """测试对不存在的计划开始子任务"""
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
+        
+        tracker = TaskTracker(storage_dir=temp_workspace)
+        tracker.start_subtask("non_existent", "subtask")
+        
+        assert True
+    
+    @patch('core.task_tracker.get_logger')
+    def test_save_plan_without_plan(self, mock_get_logger, temp_workspace):
+        """测试保存不存在的计划"""
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
+        
+        tracker = TaskTracker(storage_dir=temp_workspace)
+        tracker._save_plan("non_existent")
+        
+        plan_file = Path(temp_workspace) / "plan_non_existent.json"
+        assert not plan_file.exists()
