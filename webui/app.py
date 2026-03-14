@@ -33,6 +33,7 @@ class TaskRequest(BaseModel):
     workspace: Optional[str] = "."
     auto_test: bool = True
     auto_commit: bool = False
+    tool: str = "opencode"  # opencode 或 qwen
 
 
 class TaskResponse(BaseModel):
@@ -154,6 +155,7 @@ def register_routes(app: FastAPI):
             "status": "pending",
             "progress": 0,
             "workspace": workspace,
+            "tool": request.tool,  # 记录使用的工具
             "auto_test": request.auto_test,
             "auto_commit": request.auto_commit,
             "created_at": datetime.now().isoformat(),
@@ -215,6 +217,24 @@ def register_routes(app: FastAPI):
             "qwencode_enabled": config.qwencode.enabled,
             "git_auto_commit": config.git.auto_commit,
             "test_auto_test": config.test.auto_test,
+        }
+    
+    @app.get("/api/tools")
+    async def get_tools():
+        """获取可用工具"""
+        from adapters import list_tools
+        tools = list_tools()
+        return {
+            "tools": [
+                {
+                    "id": name,
+                    "name": name,
+                    "available": info.get("available", False),
+                    "version": info.get("version", "N/A"),
+                    "description": info.get("description", ""),
+                }
+                for name, info in tools.items()
+            ]
         }
     
     @app.post("/api/commands")
@@ -476,6 +496,13 @@ def get_html_content() -> str:
                 <label>工作空间</label>
                 <input type="text" id="workspace" value="." placeholder="项目路径">
             </div>
+            <div class="form-group">
+                <label>🔧 选择工具</label>
+                <select id="toolSelect">
+                    <option value="opencode">Opencode (代码生成核心)</option>
+                    <option value="qwen">Qwen (通义千问)</option>
+                </select>
+            </div>
             <div class="checkbox-group">
                 <label>
                     <input type="checkbox" id="autoTest" checked>
@@ -511,10 +538,30 @@ def get_html_content() -> str:
     <script>
         let tasks = {};
         
+        // 加载工具状态
+        async function loadTools() {
+            try {
+                const response = await fetch('/api/tools');
+                const data = await response.json();
+                const select = document.getElementById('toolSelect');
+                
+                select.innerHTML = data.tools
+                    .filter(t => t.available)
+                    .map(t => `
+                        <option value="${t.id}">${t.id === 'opencode' ? '⚡' : '🤖'} ${t.name} (${t.version})</option>
+                    `).join('');
+                
+                addLog(`可用工具：${data.tools.map(t => t.name).join(', ')}`, 'info');
+            } catch (error) {
+                addLog(`加载工具失败：${error.message}`, 'warning');
+            }
+        }
+        
         // 创建任务
         async function createTask() {
             const description = document.getElementById('taskDescription').value;
             const workspace = document.getElementById('workspace').value;
+            const tool = document.getElementById('toolSelect').value;
             const autoTest = document.getElementById('autoTest').checked;
             const autoCommit = document.getElementById('autoCommit').checked;
             
@@ -527,11 +574,17 @@ def get_html_content() -> str:
                 const response = await fetch('/api/tasks', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ description, workspace, auto_test: autoTest, auto_commit: autoCommit })
+                    body: JSON.stringify({
+                        description,
+                        workspace,
+                        tool,
+                        auto_test: autoTest,
+                        auto_commit: autoCommit
+                    })
                 });
                 
                 const data = await response.json();
-                addLog(`任务已创建：${data.task_id}`, 'info');
+                addLog(`任务已创建：${data.task_id} (使用 ${data.tool || 'opencode'})`, 'info');
                 loadTasks();
             } catch (error) {
                 addLog(`创建任务失败：${error.message}`, 'error');
@@ -573,10 +626,19 @@ def get_html_content() -> str:
                     dateStr = task.created_at || '未知时间';
                 }
                 
+                const toolBadge = task.tool ? `
+                    <span style="background: rgba(0,217,255,0.2); color: #00d9ff; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-left: 8px;">
+                        ${task.tool === 'qwen' ? '🤖 Qwen' : '⚡ Opencode'}
+                    </span>
+                ` : '';
+                
                 return `
                 <div class="task-item">
                     <div class="task-info">
-                        <div><strong>${escapeHtml(task.description)}</strong></div>
+                        <div>
+                            <strong>${escapeHtml(task.description)}</strong>
+                            ${toolBadge}
+                        </div>
                         <div style="color: #888; font-size: 13px; margin-top: 4px;">
                             ${dateStr}
                         </div>
@@ -619,6 +681,7 @@ def get_html_content() -> str:
         setInterval(loadTasks, 3000);
         
         // 初始加载
+        loadTools();
         loadTasks();
         addLog('Web UI 已就绪', 'success');
     </script>
