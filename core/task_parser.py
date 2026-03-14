@@ -361,6 +361,10 @@ class TaskParser:
         request_lower = request.lower()
         identified_types = []
 
+        # 首先检查是否是文档/总结类任务
+        if any(word in request_lower for word in ["总结", "分析", "报告", "文档", "说明", "describe", "summary", "analyze"]):
+            identified_types.append(TaskType.DOCUMENTATION)
+
         for task_type, keywords in self.TASK_TYPE_KEYWORDS.items():
             for keyword in keywords:
                 if keyword in request_lower:
