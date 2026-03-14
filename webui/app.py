@@ -409,6 +409,101 @@ def register_routes(app: FastAPI):
             "events": [e.to_dict() for e in events],
             "stats": event_bus.get_stats(),
         }
+    
+    # ============ 项目管理 API ============
+    
+    @app.get("/api/projects")
+    async def list_projects(favorite: bool = False, tag: Optional[str] = None):
+        """获取项目列表"""
+        from core.project_manager import get_project_manager
+        pm = get_project_manager()
+        projects = pm.list_projects(favorite_only=favorite, tag=tag)
+        return {
+            "projects": [p.to_dict() for p in projects],
+            "stats": pm.get_stats(),
+        }
+    
+    @app.post("/api/projects")
+    async def add_project(path: str, name: Optional[str] = None, description: str = "", tags: Optional[List[str]] = None):
+        """添加项目"""
+        from core.project_manager import get_project_manager
+        pm = get_project_manager()
+        project = pm.add_project(path, name, description, tags)
+        return {"project": project.to_dict(), "message": "项目已添加"}
+    
+    @app.get("/api/projects/{project_id}")
+    async def get_project(project_id: str):
+        """获取项目详情"""
+        from core.project_manager import get_project_manager
+        pm = get_project_manager()
+        project = pm.get_project(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="项目不存在")
+        
+        pm.access_project(project_id)  # 记录访问
+        return {"project": project.to_dict()}
+    
+    @app.put("/api/projects/{project_id}")
+    async def update_project(
+        project_id: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        is_favorite: Optional[bool] = None,
+        notes: Optional[str] = None
+    ):
+        """更新项目"""
+        from core.project_manager import get_project_manager
+        pm = get_project_manager()
+        project = pm.update_project(
+            project_id,
+            name=name,
+            description=description,
+            tags=tags,
+            is_favorite=is_favorite,
+            notes=notes
+        )
+        if not project:
+            raise HTTPException(status_code=404, detail="项目不存在")
+        
+        return {"project": project.to_dict(), "message": "项目已更新"}
+    
+    @app.delete("/api/projects/{project_id}")
+    async def delete_project(project_id: str):
+        """删除项目"""
+        from core.project_manager import get_project_manager
+        pm = get_project_manager()
+        if not pm.remove_project(project_id):
+            raise HTTPException(status_code=404, detail="项目不存在")
+        
+        return {"message": "项目已删除"}
+    
+    @app.post("/api/projects/{project_id}/favorite")
+    async def toggle_favorite(project_id: str):
+        """切换收藏状态"""
+        from core.project_manager import get_project_manager
+        pm = get_project_manager()
+        project = pm.get_project(project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="项目不存在")
+        
+        pm.update_project(project_id, is_favorite=not project.is_favorite)
+        return {"message": f"已{'收藏' if not project.is_favorite else '取消收藏'}"}
+    
+    @app.get("/api/projects/search/{query}")
+    async def search_projects(query: str):
+        """搜索项目"""
+        from core.project_manager import get_project_manager
+        pm = get_project_manager()
+        projects = pm.search_projects(query)
+        return {"projects": [p.to_dict() for p in projects]}
+    
+    @app.get("/api/projects/tags")
+    async def get_tags():
+        """获取所有标签"""
+        from core.project_manager import get_project_manager
+        pm = get_project_manager()
+        return {"tags": pm.get_all_tags()}
 
 
 async def execute_task(task_id: str, request: TaskRequest):
@@ -683,12 +778,61 @@ def get_html_content() -> str:
         </div>
         
         <div class="card">
+            <h2>📁 项目管理</h2>
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+                <input type="text" id="projectSearch" placeholder="🔍 搜索项目..." oninput="searchProjects(this.value)" style="flex: 1;">
+                <button onclick="showAddProjectDialog()" style="padding: 12px 16px;">➕ 添加项目</button>
+            </div>
+            <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+                <button onclick="loadProjects()" style="padding: 8px 12px; background: rgba(0,217,255,0.2);">全部</button>
+                <button onclick="loadProjects(true)" style="padding: 8px 12px; background: rgba(255,165,2,0.2);">⭐ 收藏</button>
+                <div id="tagFilters" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+            </div>
+            <div id="projectList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;">
+                <!-- 动态生成 -->
+            </div>
+        </div>
+        
+        <!-- 添加项目对话框 -->
+        <div id="addProjectDialog" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center;">
+            <div style="background: #1a1a2e; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 style="margin: 0;">➕ 添加项目</h3>
+                    <button onclick="closeAddProjectDialog()" style="padding: 4px 12px; background: transparent; border: 1px solid rgba(255,255,255,0.2);">✕</button>
+                </div>
+                <div class="form-group">
+                    <label>项目路径</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="newProjectPath" placeholder="/path/to/project">
+                        <button onclick="browseForProject()" style="padding: 12px;">📁</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>项目名称</label>
+                    <input type="text" id="newProjectName" placeholder="自动识别">
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <textarea id="newProjectDesc" placeholder="项目描述..." style="min-height: 80px;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>标签（逗号分隔）</label>
+                    <input type="text" id="newProjectTags" placeholder="python, web, api">
+                </div>
+                <div style="display: flex; gap: 8px; margin-top: 16px;">
+                    <button onclick="confirmAddProject()" style="flex: 1;">添加</button>
+                    <button onclick="closeAddProjectDialog()" style="flex: 1; background: transparent; border: 1px solid rgba(255,255,255,0.2);">取消</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
             <h2>📋 任务列表</h2>
             <div id="taskList" class="task-list">
                 <p style="color: #666; text-align: center;">暂无任务</p>
             </div>
         </div>
-        
+
         <div class="card">
             <h2>📊 执行日志</h2>
             <div id="logOutput">
@@ -902,10 +1046,10 @@ def get_html_content() -> str:
             try {
                 const response = await fetch('/api/events?limit=20');
                 const data = await response.json();
-                
+
                 const output = document.getElementById('logOutput');
                 const events = data.events.reverse();
-                
+
                 output.innerHTML = events.map(e => {
                     const time = new Date(e.timestamp * 1000).toLocaleTimeString();
                     const typeMap = {
@@ -917,11 +1061,221 @@ def get_html_content() -> str:
                     const className = typeMap[e.type] || 'log-info';
                     return `<div class="log-line ${className}">[${time}] ${e.type}: ${JSON.stringify(e.payload)}</div>`;
                 }).join('');
-                
+
                 output.scrollTop = output.scrollHeight;
             } catch (error) {
                 console.error('加载事件失败:', error);
             }
+        }
+
+        // ========== 项目管理功能 ==========
+
+        // 加载项目列表
+        async function loadProjects(favoriteOnly = false) {
+            try {
+                const response = await fetch(`/api/projects?favorite=${favoriteOnly}`);
+                const data = await response.json();
+
+                const projectList = document.getElementById('projectList');
+                const projects = data.projects;
+
+                if (projects.length === 0) {
+                    projectList.innerHTML = '<p style="color: #666; grid-column: 1/-1; text-align: center;">暂无项目，点击右上角添加</p>';
+                    return;
+                }
+
+                projectList.innerHTML = projects.map(p => {
+                    const typeIcon = p.metadata?.has_python ? '🐍' :
+                                    p.metadata?.has_node ? '📦' :
+                                    p.metadata?.has_rust ? '🦀' :
+                                    p.metadata?.has_go ? '🐹' : '📁';
+                    const typeText = p.metadata?.type || 'unknown';
+
+                    return `
+                        <div class="project-card" style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 16px; border: 1px solid ${p.is_favorite ? 'rgba(255,165,2,0.5)' : 'rgba(255,255,255,0.1)'};">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="font-size: 24px;">${typeIcon}</span>
+                                    <div>
+                                        <div style="font-weight: 600;">${p.name}</div>
+                                        <div style="font-size: 12px; color: #888;">${typeText}</div>
+                                    </div>
+                                </div>
+                                <button onclick="toggleFavorite('${p.id}')" style="background: transparent; border: none; font-size: 18px; cursor: pointer;">
+                                    ${p.is_favorite ? '⭐' : '☆'}
+                                </button>
+                            </div>
+                            <div style="font-size: 13px; color: #888; margin-bottom: 8px;">${p.path}</div>
+                            ${p.description ? `<div style="font-size: 13px; color: #aaa; margin-bottom: 8px;">${p.description}</div>` : ''}
+                            <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 12px;">
+                                ${(p.tags || []).map(t => `<span style="background: rgba(0,217,255,0.2); color: #00d9ff; padding: 2px 8px; border-radius: 4px; font-size: 11px;">${t}</span>`).join('')}
+                            </div>
+                            <div style="display: flex; gap: 8px;">
+                                <button onclick="selectProjectAsWorkspace('${p.path}')" style="flex: 1; padding: 6px; font-size: 12px;">设为工作目录</button>
+                                <button onclick="deleteProject('${p.id}')" style="padding: 6px 12px; font-size: 12px; background: rgba(255,71,87,0.2); color: #ff4757;">删除</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                // 加载标签
+                loadProjectTags();
+
+            } catch (error) {
+                console.error('加载项目失败:', error);
+            }
+        }
+
+        // 加载标签过滤器
+        async function loadProjectTags() {
+            try {
+                const response = await fetch('/api/projects/tags');
+                const data = await response.json();
+                const tagFilters = document.getElementById('tagFilters');
+
+                tagFilters.innerHTML = data.tags.map(t => `
+                    <button onclick="filterByTag('${t}')" style="padding: 4px 8px; font-size: 11px; background: rgba(0,217,255,0.1); border: 1px solid rgba(0,217,255,0.3); border-radius: 4px; color: #00d9ff; cursor: pointer;">#${t}</button>
+                `).join('');
+            } catch (error) {
+                console.error('加载标签失败:', error);
+            }
+        }
+
+        // 按标签过滤
+        function filterByTag(tag) {
+            loadProjects(false, tag);
+        }
+
+        // 搜索项目
+        async function searchProjects(query) {
+            if (!query) {
+                loadProjects();
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/projects/search/${encodeURIComponent(query)}`);
+                const data = await response.json();
+
+                const projectList = document.getElementById('projectList');
+                const projects = data.projects;
+
+                if (projects.length === 0) {
+                    projectList.innerHTML = '<p style="color: #666; grid-column: 1/-1; text-align: center;">未找到匹配的项目</p>';
+                    return;
+                }
+
+                // 复用渲染逻辑
+                projectList.innerHTML = projects.map(p => renderProjectCard(p)).join('');
+            } catch (error) {
+                console.error('搜索失败:', error);
+            }
+        }
+
+        // 显示添加项目对话框
+        function showAddProjectDialog() {
+            document.getElementById('addProjectDialog').style.display = 'flex';
+        }
+
+        // 关闭添加项目对话框
+        function closeAddProjectDialog() {
+            document.getElementById('addProjectDialog').style.display = 'none';
+        }
+
+        // 浏览选择项目路径
+        async function browseForProject() {
+            document.getElementById('browseDialog').style.display = 'flex';
+            currentBrowsePath = document.getElementById('newProjectPath').value || "~";
+            await loadDirectory(currentBrowsePath);
+
+            // 修改确认函数
+            window.confirmWorkspace = function() {
+                document.getElementById('newProjectPath').value = currentBrowsePath;
+                closeBrowseDialog();
+            };
+        }
+
+        // 确认添加项目
+        async function confirmAddProject() {
+            const path = document.getElementById('newProjectPath').value;
+            const name = document.getElementById('newProjectName').value;
+            const description = document.getElementById('newProjectDesc').value;
+            const tags = document.getElementById('newProjectTags').value.split(',').map(t => t.trim()).filter(t => t);
+
+            if (!path) {
+                alert('请输入项目路径');
+                return;
+            }
+
+            try {
+                const params = new URLSearchParams({ path });
+                if (name) params.append('name', name);
+                if (description) params.append('description', description);
+                if (tags.length) params.append('tags', JSON.stringify(tags));
+
+                const response = await fetch(`/api/projects?${params}`, {
+                    method: 'POST',
+                });
+
+                const data = await response.json();
+                addLog(`项目已添加：${data.project.name}`, 'success');
+                closeAddProjectDialog();
+                loadProjects();
+
+                // 清空表单
+                document.getElementById('newProjectPath').value = '';
+                document.getElementById('newProjectName').value = '';
+                document.getElementById('newProjectDesc').value = '';
+                document.getElementById('newProjectTags').value = '';
+
+            } catch (error) {
+                addLog(`添加项目失败：${error.message}`, 'error');
+            }
+        }
+
+        // 切换收藏
+        async function toggleFavorite(projectId) {
+            try {
+                const response = await fetch(`/api/projects/${projectId}/favorite`, {
+                    method: 'POST',
+                });
+                await response.json();
+                loadProjects();
+            } catch (error) {
+                addLog(`操作失败：${error.message}`, 'error');
+            }
+        }
+
+        // 删除项目
+        async function deleteProject(projectId) {
+            if (!confirm('确定要删除这个项目吗？')) return;
+
+            try {
+                const response = await fetch(`/api/projects/${projectId}`, {
+                    method: 'DELETE',
+                });
+                await response.json();
+                addLog('项目已删除', 'info');
+                loadProjects();
+            } catch (error) {
+                addLog(`删除失败：${error.message}`, 'error');
+            }
+        }
+
+        // 选择项目为工作目录
+        function selectProjectAsWorkspace(path) {
+            document.getElementById('workspace').value = path;
+            selectedWorkspace = path;
+            addLog(`已设置工作目录：${path}`, 'info');
+        }
+
+        // 渲染项目卡片（复用）
+        function renderProjectCard(p) {
+            const typeIcon = p.metadata?.has_python ? '🐍' :
+                            p.metadata?.has_node ? '📦' :
+                            p.metadata?.has_rust ? '🦀' :
+                            p.metadata?.has_go ? '🐹' : '📁';
+            // ... 复用上面的渲染逻辑
         }
         
         // 创建任务
@@ -1063,6 +1417,7 @@ def get_html_content() -> str:
         // 初始加载
         loadTools();
         loadWorkspaces();  // 加载工作目录
+        loadProjects();    // 加载项目
         loadTasks();
         loadEvents();
         addLog('Web UI 已就绪，WebSocket 实时推送已启用', 'success');
