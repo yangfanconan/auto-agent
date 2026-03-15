@@ -280,25 +280,59 @@ def main():
         action="store_true",
         help="详细输出"
     )
+
+    parser.add_argument(
+        "--websocket-port",
+        type=int,
+        default=8765,
+        help="WebSocket 端口（默认：8765）"
+    )
+
+    parser.add_argument(
+        "--enable-console-redirect",
+        action="store_true",
+        help="启用控制台 IO 接管"
+    )
+
+    parser.add_argument(
+        "--no-console-redirect",
+        action="store_true",
+        help="禁用控制台 IO 接管"
+    )
     
     args = parser.parse_args()
-    
+
     # 打印横幅
     print_banner()
-    
+
     # 加载配置
     config_path = args.config if args.config else str(Path(__file__).parent / "config" / "settings.yaml")
     config = load_config(config_path)
-    
+
     if args.verbose:
         config.log.level = "DEBUG"
-    
+
     # 初始化日志
     logger = get_logger(log_dir=str(Path(args.workspace) / "logs"))
     logger.info(f"Auto-Agent 启动，工作空间：{args.workspace}")
-    
+
     # 打印工具状态
     print_tools_status()
+
+    # 启动 WebSocket 服务和控制台 IO 接管（如果配置启用）
+    enable_websocket = config.websocket.enabled and not args.no_console_redirect
+    enable_console_redirect = config.console_io.enabled and not args.no_console_redirect
+    
+    if args.enable_console_redirect:
+        enable_console_redirect = True
+    
+    if enable_websocket or enable_console_redirect:
+        logger.info("启动增强功能...")
+        start_enhanced_features(
+            enable_websocket=enable_websocket,
+            enable_console_redirect=enable_console_redirect,
+            websocket_port=args.websocket_port or config.websocket.port,
+        )
 
     # 环境检查模式
     if args.check:
@@ -317,6 +351,49 @@ def main():
     run_interactive_mode(args.workspace, config)
 
     return 0
+
+
+def start_enhanced_features(
+    enable_websocket: bool = True,
+    enable_console_redirect: bool = True,
+    websocket_port: int = 8765,
+):
+    """启动增强功能（WebSocket + 控制台 IO 接管）"""
+    import asyncio
+    
+    # 启动控制台 IO 接管
+    if enable_console_redirect:
+        from core.console_io import start_console_capture, IOMessage
+        from ui.websocket_server import WebSocketManager, WebSocketIOBridge
+        
+        # 创建 WebSocket 管理器
+        ws_manager = WebSocketManager(port=websocket_port)
+        
+        # 创建 IO 桥接器
+        io_bridge = WebSocketIOBridge(ws_manager)
+        
+        # 设置 WebSocket 消息处理
+        ws_manager.on_message = io_bridge.handle_websocket_message
+        
+        # 启动控制台捕获
+        def on_io_message(message: IOMessage):
+            """IO 消息回调"""
+            asyncio.create_task(ws_manager.send_message({
+                "type": "io",
+                "event": message.type.value,
+                "data": message.to_dict(),
+            }))
+        
+        start_console_capture(on_io_message)
+        
+        # 启动 WebSocket 服务器（后台线程）
+        import threading
+        ws_thread = threading.Thread(target=lambda: asyncio.run(ws_manager.start_server()), daemon=True)
+        ws_thread.start()
+        
+        print(f"\n🔌 WebSocket 服务已启动：ws://0.0.0.0:{websocket_port}")
+        print(f"📡 控制台 IO 接管已启用")
+        print(f"   连接 WebSocket 以接收实时日志和工具状态\n")
 
 
 def run_webui(host: str, port: int):

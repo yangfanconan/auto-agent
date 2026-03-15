@@ -462,6 +462,25 @@ class TaskParser:
         """生成子任务列表（增强版）"""
         subtasks = []
 
+        # 检查是否是开放式问题（让 Qwen 自主决策）
+        is_open_question = any(word in request.lower() for word in [
+            "如何", "怎么", "what", "how", "why", "分析", "总结", "描述", "介绍",
+            "配置", "情况", "状态", "check", "describe"
+        ])
+        
+        # 如果是开放式问题，创建一个通用任务让 Qwen 自主决策
+        if is_open_question and len(task_types) == 1 and task_types[0] in [TaskType.DOCUMENTATION, TaskType.ENVIRONMENT_SETUP]:
+            subtasks.append(SubTask(
+                id="task_qwen_agent",
+                name="Qwen 智能执行",
+                description=f"请分析用户需求并自主决策执行必要的步骤：{request[:200]}",
+                task_type=TaskType.CODE_GENERATION,  # 使用代码生成类型，会调用 Qwen
+                priority=TaskPriority.HIGH,
+                estimated_duration=600,
+                metadata={"auto_agent": True, "request": request}
+            ))
+            return subtasks
+
         # 项目初始化任务
         if TaskType.PROJECT_INIT in task_types or project_type:
             subtasks.append(SubTask(
@@ -538,7 +557,7 @@ class TaskParser:
             subtasks.append(SubTask(
                 id="task_general",
                 name="通用任务",
-                description=request[:100],
+                description=request[:200],
                 task_type=TaskType.UNKNOWN,
                 priority=TaskPriority.MEDIUM,
                 estimated_duration=60

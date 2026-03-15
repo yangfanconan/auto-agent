@@ -18,7 +18,8 @@ rich>=13.0.0          # 美化终端输出
 prompt-toolkit>=3.0.0 # 交互式命令行
 tqdm>=4.66.0          # 进度条
 
-# Web UI（可选）
+# WebSocket 支持
+websockets>=12.0.0    # WebSocket 库
 fastapi>=0.104.0      # Web API 框架
 uvicorn>=0.24.0       # ASGI 服务器
 

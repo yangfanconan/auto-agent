@@ -1,4 +1,4 @@
-# Auto-Agent 配置文件 (v2.0)
+# Auto-Agent 配置文件 (v2.0 增强版)
 
 # 基本配置
 name: auto-agent
@@ -12,12 +12,13 @@ opencode:
   timeout: 300  # 超时时间（秒）
   max_retries: 3  # 最大重试次数
 
-# Qwencode 配置
-qwencode:
+# Qwen 配置
+qwen:
   enabled: true
   path: ""  # 空表示自动检测
-  timeout: 180
+  timeout: 300
   max_retries: 3
+  model: ""  # 空表示使用默认模型
 
 # Git 配置
 git:
@@ -25,17 +26,15 @@ git:
   auto_push: false
   branch_prefix: feature
   commit_template: "{type}: {description}"
-  # 智能提交配置
-  smart_commit: true  # 自动生成提交信息
+  smart_commit: true
 
 # 测试配置
 test:
   auto_test: true
-  coverage_threshold: 90.0  # 覆盖率目标（%）
+  coverage_threshold: 90.0
   test_framework: pytest
   timeout: 600
-  # 智能修复配置
-  auto_fix: true  # 自动修复失败测试
+  auto_fix: true
 
 # 环境配置
 environment:
@@ -43,28 +42,54 @@ environment:
   node_version: "22"
   auto_install: true
   check_ports: true
-  # 虚拟环境配置
   venv:
-    auto_create: true  # 自动创建虚拟环境
-    path: ".venv"  # 虚拟环境路径
+    auto_create: true
+    path: ".venv"
 
 # 日志配置
 log:
-  level: INFO  # DEBUG, INFO, WARNING, ERROR
+  level: INFO
   save_json: true
-  max_file_size: 10485760  # 10MB
+  max_file_size: 10485760
   backup_count: 5
 
 # UI 配置
 ui:
-  theme: default  # default, dark, light, monokai
-  rich_output: true  # 使用 Rich 美化输出
-  progress_bar: true  # 显示进度条
+  theme: default
+  rich_output: true
+  progress_bar: true
+
+# WebSocket 配置
+websocket:
+  enabled: true
+  host: "0.0.0.0"
+  port: 8765
+  heartbeat_interval: 30.0
+
+# 控制台 IO 配置
+console_io:
+  enabled: true
+  capture_input: true
+  capture_output: true
+  capture_error: true
+  keep_original: true  # 保留原始控制台输出
+
+# 工具调度配置
+scheduler:
+  auto_retry: true
+  max_retries: 3
+  retry_delay: 1.0
+  parallel_execution: false
+  state_decision:
+    # 状态决策规则
+    on_error: "retry"  # retry/notify_user/stop
+    on_waiting: "notify_user"  # notify_user/auto_continue
+    on_running: "log"  # log/notify_user
 
 # 知识库配置
 knowledge:
-  auto_index: true  # 自动索引项目
-  index_patterns:  # 索引文件模式
+  auto_index: true
+  index_patterns:
     - "**/*.py"
     - "**/*.js"
     - "**/*.ts"

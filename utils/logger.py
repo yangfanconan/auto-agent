@@ -11,11 +11,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-try:
-    from ..core.events import publish_event
-except ImportError:
-    from core.events import publish_event
-
 
 class StructuredLogger:
     """结构化日志记录器"""
@@ -58,7 +53,7 @@ class StructuredLogger:
         self.json_logs = []
 
     def _log_json(self, level: str, message: str, extra: dict = None):
-        """记录 JSON 格式日志"""
+        """记录 JSON 格式日志并推送事件"""
         log_entry = {
             "timestamp": datetime.now().timestamp(),
             "time": datetime.now().strftime("%H:%M:%S"),
@@ -68,12 +63,16 @@ class StructuredLogger:
         }
         self.json_logs.append(log_entry)
         
-        # 发布日志事件
-        publish_event(
-            event_type="system.log",
-            payload=log_entry,
-            source="logger"
-        )
+        # 延迟导入，避免循环依赖
+        try:
+            from core.events import publish_event
+            publish_event(
+                event_type="system.log",
+                payload=log_entry,
+                source="logger"
+            )
+        except (ImportError, Exception):
+            pass  # 如果事件总线不可用，只记录日志
 
     def debug(self, message: str, extra: dict = None):
         self.logger.debug(message)

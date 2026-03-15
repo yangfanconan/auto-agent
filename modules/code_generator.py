@@ -283,46 +283,50 @@ if __name__ == "__main__":
     ) -> CodeGenerationResult:
         """
         生成代码
-        
+
         Args:
             description: 代码功能描述
             language: 编程语言
             output_dir: 输出目录
             filename: 文件名
-        
+
         Returns:
             CodeGenerationResult: 生成结果
         """
-        self.logger.info(f"开始生成代码：{description[:50]}...")
+        # 确保参数类型正确
+        description = str(description) if description else "生成代码"
+        language = str(language) if language else "python"
         
+        self.logger.info(f"开始生成代码：{description[:50]}..., language={language}, type={type(language)}")
+
         result = CodeGenerationResult(success=False)
-        
+
         try:
             # 确定输出路径
             if output_dir:
                 output_path = Path(output_dir)
             else:
                 output_path = self.workspace
-            
+
             output_path.mkdir(parents=True, exist_ok=True)
-            
+
             # 确定文件名
             if not filename:
                 ext = self.LANGUAGE_EXTENSIONS.get(language.lower(), "txt")
                 filename = f"generated_{len(self._generated_files) + 1}.{ext}"
-            
+
             file_path = output_path / filename
-            
+
             # 使用 opencode 生成代码
             code_content = self._generate_with_opencode(description, language)
-            
+
             if not code_content:
                 raise CodeGenerationException("代码生成失败，未获取到有效内容")
-            
+
             # 保存文件
             with open(file_path, 'w', encoding='utf-8') as f:
                 f.write(code_content)
-            
+
             # 记录生成的文件
             code_file = CodeFile(
                 path=str(file_path),
@@ -332,16 +336,16 @@ if __name__ == "__main__":
             )
             self._generated_files.append(code_file)
             result.files.append(code_file)
-            
+
             result.success = True
             result.metadata["output_path"] = str(file_path)
-            
+
             self.logger.info(f"代码生成成功：{file_path}")
-            
+
         except Exception as e:
             result.errors.append(str(e))
             self.logger.error(f"代码生成失败：{e}")
-        
+
         return result
     
     def _generate_with_opencode(self, description: str, language: str) -> Optional[str]:
@@ -684,8 +688,18 @@ module.exports = {{ main }};
         try:
             # 获取任务描述（确保是字符串）
             description = str(subtask.description) if subtask.description else f"生成{subtask.name}"
-            language = subtask.metadata.get("language", "python")
+            
+            # 修复：确保 language 是字符串，而不是 SubTask 对象
+            lang_value = subtask.metadata.get("language", "python")
+            if isinstance(lang_value, str):
+                language = lang_value
+            else:
+                language = "python"  # 默认值
+            
             output_dir = subtask.metadata.get("output_dir")
+            
+            # 调试日志
+            self.logger.info(f"代码生成任务：description={description[:50]}..., language={language} (type={type(language).__name__})")
 
             # 检查是否是项目初始化任务
             if subtask.task_type.value == "project_init":
@@ -693,7 +707,7 @@ module.exports = {{ main }};
                 project_name = subtask.metadata.get("project_name")
                 result = self.initialize_project_structure(project_type, project_name)
             else:
-                result = self.generate(description, language, output_dir)
+                result = self.generate(str(description), str(language), output_dir)
 
             if result.success:
                 files_info = "\n".join([f"  - {f.path}" for f in result.files])
@@ -702,4 +716,5 @@ module.exports = {{ main }};
                 return f"代码生成失败：{', '.join(result.errors)}"
 
         except Exception as e:
+            self.logger.error(f"代码生成异常：{e}, language 类型：{type(subtask.metadata.get('language', 'python'))}")
             raise CodeGenerationException(f"代码生成失败：{e}")

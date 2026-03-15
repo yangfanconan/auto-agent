@@ -231,9 +231,9 @@ class AutoAgent:
         # 代码生成处理器
         def code_handler(plan_id: str, subtask: SubTask):
             if self._code_generator:
-                return self._code_generator.generate(plan_id, subtask)
+                return self._code_generator.generate_task(plan_id, subtask)
             return "代码生成模块未初始化"
-        
+
         self.scheduler.register_handler(TaskType.CODE_GENERATION, code_handler)
         
         # 测试处理器

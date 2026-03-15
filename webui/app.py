@@ -42,6 +42,7 @@ class TaskResponse(BaseModel):
     status: str
     message: str
     created_at: str
+    tool: str = "opencode"  # 添加 tool 字段
 
 
 class TaskStatus(BaseModel):
@@ -165,15 +166,16 @@ def register_routes(app: FastAPI):
         }
         
         tasks[task_id] = task
-        
+
         # 异步执行任务
         asyncio.create_task(execute_task(task_id, request))
-        
+
         return TaskResponse(
             task_id=task_id,
             status="pending",
             message="任务已创建",
-            created_at=task["created_at"]
+            created_at=task["created_at"],
+            tool=request.tool  # 返回工具选择
         )
     
     @app.delete("/api/tasks/{task_id}")
@@ -530,42 +532,112 @@ def register_routes(app: FastAPI):
 async def execute_task(task_id: str, request: TaskRequest):
     """执行任务"""
     global current_agent, tasks
-    
+
     try:
         # 更新状态为运行中
         tasks[task_id]["status"] = "running"
         tasks[task_id]["updated_at"] = datetime.now().isoformat()
         
-        # 解析任务
-        parser = TaskParser()
-        plan = parser.parse(request.description)
+        # 发布事件
+        from core.events import publish_event, EventType
+        publish_event(EventType.TASK_STARTED, {
+            "task_id": task_id,
+            "description": request.description,
+            "tool": request.tool,
+        })
+
+        # 初始化智能体（每次任务都重新初始化，确保状态干净）
+        workspace = request.workspace or "."
+        from utils import load_config, AgentConfig
+        from modules import EnvironmentManager, CodeGenerator, TestRunner, GitManager, DeliveryManager
         
+        config = load_config()
+        agent = AutoAgent(workspace=workspace, config=config.__dict__)
+        
+        # 设置模块
+        agent.set_modules(
+            environment=EnvironmentManager(workspace),
+            code_generator=CodeGenerator(workspace),
+            test_runner=TestRunner(workspace),
+            git_manager=GitManager(workspace),
+            delivery=DeliveryManager(workspace)
+        )
+        
+        # 设置工具偏好
+        if request.tool == "qwen":
+            from adapters import get_tool as get_adapter_tool
+            agent._code_generator.qwencode = get_adapter_tool("qwencode")
+        
+        current_agent = agent
+
+        # 执行用户请求 - 这会创建新的任务计划并执行
+        result = current_agent.execute(request.description)
+        
+        # 获取当前计划 ID（execute 方法会创建新计划）
+        plan = current_agent.scheduler._current_plan
+        if not plan:
+            raise Exception("任务计划未创建")
+        
+        plan_id = plan.id
+
         # 更新子任务
         tasks[task_id]["subtasks"] = [t.to_dict() for t in plan.subtasks]
+        tasks[task_id]["plan_id"] = plan_id
+        tasks[task_id]["progress"] = 0
+
+        # 获取详细报告
+        report = current_agent.tracker.get_progress_report(plan_id)
         
-        # 执行计划
-        if current_agent:
-            result = current_agent.scheduler.execute_plan(plan)
-            
-            # 获取报告
-            report = current_agent.tracker.get_progress_report(plan.id)
-            
-            # 更新任务
-            tasks[task_id]["status"] = "completed" if result else "failed"
-            tasks[task_id]["progress"] = plan.get_progress()
-            tasks[task_id]["result"] = report
-            tasks[task_id]["updated_at"] = datetime.now().isoformat()
-            
-            logger.info(f"任务完成：{task_id}, 结果：{result}")
-        else:
-            tasks[task_id]["status"] = "failed"
-            tasks[task_id]["result"] = {"error": "智能体未初始化"}
-            
+        # 获取子任务详细结果
+        subtask_results = []
+        for subtask in plan.subtasks:
+            subtask_info = subtask.to_dict()
+            # 从 tracker 获取实际执行结果
+            tracked_subtask = current_agent.tracker._get_subtask(plan, subtask.id)
+            if tracked_subtask:
+                subtask_info["status"] = tracked_subtask.status
+                # 保存完整的执行结果
+                if tracked_subtask.result:
+                    result_str = str(tracked_subtask.result)
+                    subtask_info["result"] = result_str[:2000]  # 增加长度限制到 2000 字符
+                    # 提取生成的文件信息
+                    if "生成的文件" in result_str:
+                        subtask_info["generated_files"] = result_str.split("生成的文件:")[1].strip() if "生成的文件:" in result_str else ""
+                else:
+                    subtask_info["result"] = None
+                subtask_info["error"] = str(tracked_subtask.error)[:1000] if tracked_subtask.error else None
+                subtask_info["progress"] = tracked_subtask.progress
+                subtask_info["duration"] = tracked_subtask.actual_duration
+            subtask_results.append(subtask_info)
+
+        # 更新任务
+        tasks[task_id]["status"] = "completed" if result.get("success", False) else "failed"
+        tasks[task_id]["progress"] = report.get("overall_progress", 100)
+        tasks[task_id]["result"] = {
+            "success": result.get("success", False),
+            "report": report,
+            "subtasks": subtask_results,
+            "briefing": current_agent.get_briefing(plan_id),
+            "generated_code": None,  # 后续可以提取生成的代码
+        }
+        tasks[task_id]["tool"] = request.tool  # 保存使用的工具
+        tasks[task_id]["updated_at"] = datetime.now().isoformat()
+
+        # 发布完成事件
+        publish_event(EventType.TASK_COMPLETED, {
+            "task_id": task_id,
+            "success": result.get("success", False),
+            "report": report,
+            "tool": request.tool,
+        })
+
+        logger.info(f"任务完成：{task_id}, 结果：{result}")
+
     except Exception as e:
         logger.error(f"任务执行失败：{e}")
         tasks[task_id]["status"] = "failed"
         tasks[task_id]["result"] = {"error": str(e)}
-    
+
     tasks[task_id]["updated_at"] = datetime.now().isoformat()
 
 
@@ -1418,36 +1490,80 @@ def get_html_content() -> str:
                 } catch (e) {
                     dateStr = task.created_at || '未知时间';
                 }
-                
+
                 const toolBadge = task.tool ? `
                     <span style="background: rgba(0,217,255,0.2); color: #00d9ff; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-left: 8px;">
-                        ${task.tool === 'qwen' ? '🤖 Qwen' : '⚡ Opencode'}
+                        ${task.tool === 'qwen' || task.tool === 'qwencode' ? '🤖 Qwen' : '⚡ Opencode'}
                     </span>
                 ` : '';
                 
+                // 子任务状态摘要
+                const subtasks = task.subtasks || [];
+                const completedCount = subtasks.filter(s => s.status === 'completed').length;
+                const subtaskSummary = subtasks.length > 0 ? `
+                    <div style="font-size: 12px; color: #888; margin-top: 8px;">
+                        子任务：${completedCount}/${subtasks.length} 完成
+                    </div>
+                ` : '';
+                
+                // 子任务详情
+                const subtaskDetails = subtasks.length > 0 ? `
+                    <div style="margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
+                        <div style="font-size: 12px; color: #aaa; margin-bottom: 8px;">子任务执行详情:</div>
+                        ${subtasks.map(s => {
+                            const statusIcon = s.status === 'completed' ? '✅' : s.status === 'failed' ? '❌' : s.status === 'in_progress' ? '🔄' : '⏳';
+                            const duration = s.duration ? `(${s.duration.toFixed(1)}秒)` : '';
+                            return `
+                                <div style="background: rgba(255,255,255,0.03); border-radius: 4px; padding: 8px; margin-bottom: 8px;">
+                                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                                        <span>${statusIcon}</span>
+                                        <span style="font-weight: 600; font-size: 13px;">${s.name}</span>
+                                        <span style="font-size: 11px; color: #666;">${duration}</span>
+                                    </div>
+                                    ${s.result ? `
+                                        <div style="font-size: 12px; color: #888; margin-top: 4px; white-space: pre-wrap; max-height: 200px; overflow: auto; background: rgba(0,0,0,0.2); padding: 6px; border-radius: 4px;">${s.result}</div>
+                                    ` : ''}
+                                    ${s.error ? `
+                                        <div style="font-size: 12px; color: #ff4757; margin-top: 4px; background: rgba(255,71,87,0.1); padding: 6px; border-radius: 4px;">❌ ${s.error}</div>
+                                    ` : ''}
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                ` : '';
+                
+                // 结果预览
+                const resultPreview = task.result?.briefing ? `
+                    <div style="background: rgba(0,255,136,0.1); border-left: 3px solid #00ff88; padding: 8px; margin-top: 8px; font-size: 12px; color: #aaa; max-height: 150px; overflow: auto;">
+                        <div style="font-weight: 600; margin-bottom: 4px;">📊 任务简报:</div>
+                        ${task.result.briefing}
+                    </div>
+                ` : (task.result?.error ? `
+                    <div style="background: rgba(255,71,87,0.1); border-left: 3px solid #ff4757; padding: 8px; margin-top: 8px; font-size: 12px; color: #ff4757;">
+                        ❌ ${task.result.error}
+                    </div>
+                ` : '');
+
                 return `
-                <div class="task-item">
+                <div class="task-item" style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
                     <div class="task-info">
-                        <div>
-                            <strong>${escapeHtml(task.description)}</strong>
-                            ${toolBadge}
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div>
+                                <strong style="font-size: 15px;">${escapeHtml(task.description)}</strong>
+                                ${toolBadge}
+                            </div>
+                            <span class="task-status status-${task.status}" style="padding: 4px 12px; border-radius: 12px; font-size: 12px;">${task.status}</span>
                         </div>
-                        <div style="color: #888; font-size: 13px; margin-top: 4px;">
-                            ${dateStr}
+                        <div style="color: #888; font-size: 12px; margin-top: 4px;">
+                            ${dateStr} | 工具：${task.tool || 'opencode'}
                         </div>
-                        <div class="progress-bar">
+                        <div class="progress-bar" style="margin-top: 12px;">
                             <div class="progress-fill" style="width: ${task.progress || 0}%"></div>
                         </div>
-                        ${task.status === 'running' ? `
-                            <div style="margin-top: 8px;">
-                                <span style="font-size: 11px; color: #00d9ff;">🔴 实时更新中</span>
-                            </div>
-                        ` : ''}
+                        ${subtaskSummary}
+                        ${subtaskDetails}
+                        ${resultPreview}
                     </div>
-                    <span class="task-status status-${task.status}">${task.status}</span>
-                    ${task.status === 'running' ? `
-                        <button onclick="viewTask('${task.task_id}')" style="margin-left: 12px; padding: 4px 12px; font-size: 12px;">查看</button>
-                    ` : ''}
                 </div>
                 `;
             }).join('');
