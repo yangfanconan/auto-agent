@@ -289,18 +289,18 @@ class QwenTool(BaseTool):
     async def handle_error(self, error: str) -> bool:
         """处理错误"""
         self._last_error = error
-        self.status = ToolStatus.ERROR
         
         # 检查是否可恢复
         if "timeout" in error.lower():
             self.logger.warning("Qwen 超时，可重试")
             return True
-        
+
         if "connection" in error.lower():
             self.logger.warning("Qwen 连接错误，可重试")
             return True
-        
-        # 其他错误不可恢复
+
+        # 其他错误不可恢复，设置 ERROR 状态
+        self.status = ToolStatus.ERROR
         return False
     
     def stop(self):
@@ -462,10 +462,12 @@ class OpenCodeTool(BaseTool):
     async def handle_error(self, error: str) -> bool:
         """处理错误"""
         self._last_error = error
-        self.status = ToolStatus.ERROR
-
-        # OpenCode 错误通常可重试
-        return "not found" not in error.lower()
+        # 只有在真正需要停止时才设置 ERROR 状态
+        if "not found" in error.lower():
+            self.status = ToolStatus.ERROR
+            return False
+        # 其他错误可重试，不设置 ERROR 状态
+        return True
     
     def stop(self):
         """停止 OpenCode"""
