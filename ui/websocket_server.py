@@ -320,10 +320,23 @@ class WebSocketIOBridge:
         self.ws_manager = websocket_manager
         self.console_io = console_redirector
 
+        # 工具调度器（延迟初始化）
+        self._scheduler = None
+
         # 订阅事件（使用同步订阅）
         self._setup_event_subscribers()
 
         self.logger.info("WebSocketIOBridge 已初始化")
+
+    def _get_scheduler(self):
+        """获取工具调度器（延迟初始化）"""
+        if self._scheduler is None:
+            try:
+                from core.tool_scheduler import get_scheduler
+                self._scheduler = get_scheduler()
+            except Exception as e:
+                self.logger.error(f"获取调度器失败：{e}")
+        return self._scheduler
 
     def _setup_event_subscribers(self):
         """设置事件订阅"""
@@ -378,38 +391,96 @@ class WebSocketIOBridge:
     async def handle_websocket_message(self, ws_id: str, data: Dict) -> Optional[Dict]:
         """处理 WebSocket 消息（回调）"""
         msg_type = data.get("type")
-        
+
         if msg_type == "command":
-            # 用户指令
+            # 用户指令 - 实际执行任务
             command = data.get("command", "")
-            self.logger.info(f"收到用户指令 [{ws_id}]: {command}")
-            
+            tool = data.get("tool", "opencode")
+            self.logger.info(f"收到用户指令 [{ws_id}]: {command}, 工具: {tool}")
+
             # 发布事件
             publish_event(
                 event_type="user.command",
-                payload={"ws_id": ws_id, "command": command},
+                payload={"ws_id": ws_id, "command": command, "tool": tool},
                 source="websocket"
             )
-            
-            return {
-                "type": "ack",
-                "event": "command_received",
-                "data": {"command": command},
-            }
-        
+
+            # 实际执行任务
+            try:
+                scheduler = self._get_scheduler()
+                if scheduler:
+                    # 提交任务到调度器
+                    task_id = await scheduler.submit_task(
+                        name=command[:50],
+                        description=command,
+                        tool_name=tool,
+                        input_text=command
+                    )
+
+                    # 启动任务执行
+                    import asyncio
+                    asyncio.create_task(self._execute_and_report(scheduler, task_id))
+
+                    return {
+                        "type": "ack",
+                        "event": "command_received",
+                        "data": {"command": command, "task_id": task_id},
+                    }
+                else:
+                    self.logger.error("调度器不可用")
+                    return {
+                        "type": "error",
+                        "event": "scheduler_unavailable",
+                        "data": {"error": "调度器不可用"},
+                    }
+            except Exception as e:
+                self.logger.error(f"任务提交失败：{e}")
+                return {
+                    "type": "error",
+                    "event": "task_submit_failed",
+                    "data": {"error": str(e)},
+                }
+
         elif msg_type == "action_confirm":
             # 操作确认
             action_id = data.get("action_id")
             confirmed = data.get("confirmed", False)
             self.logger.info(f"操作确认 [{ws_id}]: {action_id} = {confirmed}")
-            
+
+            # 确认任务
+            scheduler = self._get_scheduler()
+            if scheduler:
+                scheduler.confirm_task(action_id, confirmed)
+
             publish_event(
                 event_type="user.action_confirm",
                 payload={"ws_id": ws_id, "action_id": action_id, "confirmed": confirmed},
                 source="websocket"
             )
-        
+
         return None
+
+    async def _execute_and_report(self, scheduler, task_id: str):
+        """执行任务并报告结果"""
+        try:
+            # 执行任务
+            await scheduler.execute_next()
+
+            # 等待任务完成
+            import asyncio
+            for _ in range(300):  # 最多等待 30 秒
+                task = scheduler.get_task(task_id)
+                if task and task.status.value in ["completed", "failed", "cancelled"]:
+                    # 广播任务结果
+                    self._broadcast({
+                        "type": "task",
+                        "event": f"task.{task.status.value}",
+                        "data": task.to_dict(),
+                    })
+                    break
+                await asyncio.sleep(0.1)
+        except Exception as e:
+            self.logger.error(f"任务执行报告失败：{e}")
 
 
 # 便捷函数
