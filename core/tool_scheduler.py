@@ -450,8 +450,9 @@ class ToolScheduler:
 
             else:
                 # 任务失败，请求决策
-                self.logger.warning(f"任务失败：{task.id}, 错误：{result.error}")
-                await self._handle_task_failure(task, result.error)
+                error_msg = result.error or f"工具执行失败 (exit_code: {result.exit_code})"
+                self.logger.warning(f"任务失败：{task.id}, 错误：{error_msg}")
+                await self._handle_task_failure(task, error_msg)
 
         except Exception as e:
             self.logger.error(f"任务执行异常：{task.id} - {e}")
