@@ -57,6 +57,25 @@ class LogConfig:
 
 
 @dataclass
+class WebsocketConfig:
+    """WebSocket 配置"""
+    enabled: bool = True
+    host: str = "0.0.0.0"
+    port: int = 8765
+    heartbeat_interval: float = 30.0
+
+
+@dataclass
+class ConsoleIOConfig:
+    """控制台 IO 配置"""
+    enabled: bool = True
+    capture_input: bool = True
+    capture_output: bool = True
+    capture_error: bool = True
+    keep_original: bool = True
+
+
+@dataclass
 class AgentConfig:
     """智能体主配置"""
     name: str = "auto-agent"
@@ -68,6 +87,8 @@ class AgentConfig:
     test: TestConfig = field(default_factory=TestConfig)
     environment: EnvironmentConfig = field(default_factory=EnvironmentConfig)
     log: LogConfig = field(default_factory=LogConfig)
+    websocket: WebsocketConfig = field(default_factory=WebsocketConfig)
+    console_io: ConsoleIOConfig = field(default_factory=ConsoleIOConfig)
     
     @classmethod
     def from_yaml(cls, path: str) -> 'AgentConfig':

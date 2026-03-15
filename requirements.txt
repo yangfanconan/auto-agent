@@ -9,6 +9,7 @@ GitPython>=3.1.40
 # 测试框架
 pytest>=7.4.0
 pytest-cov>=4.1.0
+pytest-asyncio>=0.21.0  # 异步测试支持
 
 # 工具调用
 # opencode 和 qwencode 通过命令行调用，无需 Python 包
@@ -25,3 +26,7 @@ uvicorn>=0.24.0       # ASGI 服务器
 
 # 工具函数
 python-dotenv>=1.0.0  # 环境变量管理
+
+# 新增依赖（v2.0 增强功能）
+requests>=2.31.0      # HTTP 请求库（用于 Qwen API 调用）
+aiohttp>=3.9.0        # 异步 HTTP 客户端

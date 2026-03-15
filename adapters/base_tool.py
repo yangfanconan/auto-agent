@@ -260,7 +260,7 @@ class QwenTool(BaseTool):
             
             return result
             
-        except asyncio.TimeoutExpired:
+        except asyncio.TimeoutError:
             if self._process:
                 self._process.kill()
             return ToolResult(
@@ -407,7 +407,7 @@ class OpenCodeTool(BaseTool):
             
             return result
             
-        except asyncio.TimeoutExpired:
+        except asyncio.TimeoutError:
             if self._process:
                 self._process.kill()
             return ToolResult(

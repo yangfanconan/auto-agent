@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto-Agent v2.0 - 智能体工作台</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --primary: #00d9ff;
+            --success: #00ff88;
+            --warning: #ffa502;
+            --error: #ff4757;
+            --bg-dark: #1a1a2e;
+            --bg-card: #16213e;
+            --text-primary: #ffffff;
+            --text-secondary: #888888;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #0f3460 100%);
+            min-height: 100vh;
+            color: var(--text-primary);
+            display: flex;
+        }
+        
+        /* 侧边导航 */
+        .sidebar {
+            width: 250px;
+            background: rgba(0,0,0,0.3);
+            padding: 20px;
+            border-right: 1px solid rgba(255,255,255,0.1);
+        }
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 30px;
+            padding: 10px;
+        }
+        .nav-menu {
+            list-style: none;
+        }
+        .nav-item {
+            padding: 12px 16px;
+            margin: 8px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .nav-item:hover, .nav-item.active {
+            background: rgba(0,217,255,0.2);
+            color: var(--primary);
+        }
+        .nav-icon { font-size: 20px; }
+        
+        /* 主内容区 */
+        .main-content {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            max-height: 100vh;
+        }
+        .page { display: none; }
+        .page.active { display: block; }
+        
+        .page-header {
+            margin-bottom: 30px;
+        }
+        .page-title {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        .page-subtitle {
+            color: var(--text-secondary);
+        }
+        
+        /* 卡片 */
+        .card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        /* 按钮 */
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: linear-gradient(90deg, var(--primary), var(--success));
+            color: var(--bg-dark);
+        }
+        .btn-primary:hover {
+            transform: scale(1.05);
+        }
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.3);
+            color: var(--text-primary);
+        }
+        .btn-danger {
+            background: rgba(255,71,87,0.2);
+            color: var(--error);
+        }
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        
+        /* 表单 */
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 12px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        .form-textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        /* 网格布局 */
+        .grid {
+            display: grid;
+            gap: 20px;
+        }
+        .grid-2 { grid-template-columns: repeat(2, 1fr); }
+        .grid-3 { grid-template-columns: repeat(3, 1fr); }
+        .grid-4 { grid-template-columns: repeat(4, 1fr); }
+        
+        /* 任务卡片 */
+        .task-card {
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            padding: 16px;
+            border-left: 4px solid var(--primary);
+        }
+        .task-card.completed { border-left-color: var(--success); }
+        .task-card.failed { border-left-color: var(--error); }
+        .task-card.running { border-left-color: var(--warning); }
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 12px;
+        }
+        .task-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .task-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .task-status {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status-completed { background: rgba(0,255,136,0.2); color: var(--success); }
+        .status-failed { background: rgba(255,71,87,0.2); color: var(--error); }
+        .status-running { background: rgba(255,165,2,0.2); color: var(--warning); }
+        .status-pending { background: rgba(136,136,136,0.2); color: var(--text-secondary); }
+        
+        /* 进度条 */
+        .progress-bar {
+            height: 6px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 12px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--success));
+            transition: width 0.3s;
+        }
+        
+        /* 项目卡片 */
+        .project-card {
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            padding: 16px;
+            transition: all 0.3s;
+        }
+        .project-card:hover {
+            background: rgba(255,255,255,0.05);
+            transform: translateY(-2px);
+        }
+        .project-name {
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .project-path {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+        .project-tags {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .tag {
+            padding: 2px 8px;
+            background: rgba(0,217,255,0.2);
+            color: var(--primary);
+            border-radius: 4px;
+            font-size: 11px;
+        }
+        .project-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        /* 模板卡片 */
+        .template-card {
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .template-card:hover {
+            background: rgba(0,217,255,0.1);
+            border-color: var(--primary);
+        }
+        .template-name {
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .template-preview {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+        
+        /* 日志输出 */
+        .log-output {
+            background: #0d1117;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .log-line {
+            margin: 4px 0;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .log-info { color: var(--primary); }
+        .log-success { color: var(--success); }
+        .log-warning { color: var(--warning); }
+        .log-error { color: var(--error); }
+        
+        /* 对话框 */
+        .dialog-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .dialog-overlay.active {
+            display: flex;
+        }
+        .dialog {
+            background: var(--bg-card);
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .dialog-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .dialog-title {
+            font-size: 20px;
+            font-weight: 600;
+        }
+        .dialog-close {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 24px;
+        }
+        
+        /* 统计卡片 */
+        .stat-card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 36px;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 8px;
+        }
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        
+        /* 工具选择 */
+        .tool-selector {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .tool-option {
+            flex: 1;
+            padding: 16px;
+            background: rgba(255,255,255,0.03);
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+        }
+        .tool-option:hover, .tool-option.selected {
+            border-color: var(--primary);
+            background: rgba(0,217,255,0.1);
+        }
+        .tool-icon { font-size: 32px; margin-bottom: 8px; }
+        .tool-name { font-weight: 600; margin-bottom: 4px; }
+        .tool-version { font-size: 12px; color: var(--text-secondary); }
+        
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-secondary);
+        }
+        .empty-icon { font-size: 64px; margin-bottom: 16px; }
+        .empty-text { font-size: 16px; margin-bottom: 20px; }
+        
+        /* 响应式 */
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+            .sidebar { width: 100%; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.1); }
+            .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <!-- 侧边导航 -->
+    <aside class="sidebar">
+        <div class="logo">🤖 Auto-Agent</div>
+        <ul class="nav-menu">
+            <li class="nav-item active" data-page="tasks">
+                <span class="nav-icon">📋</span>
+                <span>任务管理</span>
+            </li>
+            <li class="nav-item" data-page="projects">
+                <span class="nav-icon">📁</span>
+                <span>项目管理</span>
+            </li>
+            <li class="nav-item" data-page="templates">
+                <span class="nav-icon">📝</span>
+                <span>提示词模板</span>
+            </li>
+            <li class="nav-item" data-page="optimize">
+                <span class="nav-icon">✨</span>
+                <span>提示词优化</span>
+            </li>
+            <li class="nav-item" data-page="logs">
+                <span class="nav-icon">📊</span>
+                <span>执行日志</span>
+            </li>
+        </ul>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+        <!-- 任务管理页面 -->
+        <section id="tasks" class="page active">
+            <div class="page-header">
+                <h1 class="page-title">📋 任务管理</h1>
+                <p class="page-subtitle">创建和管理 AI 编程任务</p>
+            </div>
+            
+            <!-- 统计卡片 -->
+            <div class="grid grid-4" style="margin-bottom: 30px;">
+                <div class="stat-card">
+                    <div class="stat-value" id="statTotal">0</div>
+                    <div class="stat-label">总任务数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="statCompleted" style="color: var(--success);">0</div>
+                    <div class="stat-label">已完成</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="statRunning" style="color: var(--warning);">0</div>
+                    <div class="stat-label">运行中</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="statFailed" style="color: var(--error);">0</div>
+                    <div class="stat-label">失败</div>
+                </div>
+            </div>
+            
+            <!-- 创建任务 -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">🚀 创建新任务</h2>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">🔧 选择工具</label>
+                    <div class="tool-selector">
+                        <div class="tool-option selected" data-tool="opencode" onclick="selectTool(this)">
+                            <div class="tool-icon">⚡</div>
+                            <div class="tool-name">Opencode</div>
+                            <div class="tool-version">v1.2.26</div>
+                        </div>
+                        <div class="tool-option" data-tool="qwen" onclick="selectTool(this)">
+                            <div class="tool-icon">🤖</div>
+                            <div class="tool-name">Qwen</div>
+                            <div class="tool-version">v0.12.3</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">📂 工作目录</label>
+                    <div style="display: flex; gap: 8px;">
+                        <select class="form-select" id="workspaceSelect" onchange="onWorkspaceChange()" style="flex: 1;">
+                            <option value="">选择常用目录...</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="browseWorkspace()">📁 浏览</button>
+                    </div>
+                    <input type="text" class="form-input" id="workspace" value="." placeholder="或手动输入路径" style="margin-top: 8px;">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">📝 任务描述</label>
+                    <textarea class="form-textarea" id="taskDescription" placeholder="例如：用 Python 写一个快速排序算法，包含单元测试和性能分析"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">
+                        <input type="checkbox" id="autoTest" checked> 自动测试
+                    </label>
+                    <label class="form-label" style="margin-left: 20px;">
+                        <input type="checkbox" id="autoCommit"> 自动提交 Git
+                    </label>
+                </div>
+                <button class="btn btn-primary" onclick="createTask()" style="width: 100%;">🚀 开始执行</button>
+            </div>
+            
+            <!-- 任务列表 -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">📋 任务列表</h2>
+                    <button class="btn btn-secondary btn-sm" onclick="loadTasks()">🔄 刷新</button>
+                </div>
+                <div id="taskList">
+                    <div class="empty-state">
+                        <div class="empty-icon">📭</div>
+                        <div class="empty-text">暂无任务，创建一个吧！</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 项目管理页面 -->
+        <section id="projects" class="page">
+            <div class="page-header">
+                <h1 class="page-title">📁 项目管理</h1>
+                <p class="page-subtitle">管理你的代码项目</p>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">📁 项目列表</h2>
+                    <button class="btn btn-primary btn-sm" onclick="showAddProjectDialog()">➕ 添加项目</button>
+                </div>
+                <div class="grid grid-3" id="projectList">
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <div class="empty-icon">📂</div>
+                        <div class="empty-text">暂无项目，添加一个吧！</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 提示词模板页面 -->
+        <section id="templates" class="page">
+            <div class="page-header">
+                <h1 class="page-title">📝 提示词模板</h1>
+                <p class="page-subtitle">快速使用预设提示词</p>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">📝 模板列表</h2>
+                    <button class="btn btn-primary btn-sm" onclick="showAddTemplateDialog()">➕ 新建模板</button>
+                </div>
+                <div class="grid grid-3" id="templateList">
+                    <!-- 模板卡片 -->
+                </div>
+            </div>
+        </section>
+
+        <!-- 提示词优化页面 -->
+        <section id="optimize" class="page">
+            <div class="page-header">
+                <h1 class="page-title">✨ 提示词优化</h1>
+                <p class="page-subtitle">让 AI 帮你优化提示词</p>
+            </div>
+            
+            <div class="card">
+                <div class="form-group">
+                    <label class="form-label">原始提示词</label>
+                    <textarea class="form-textarea" id="originalPrompt" placeholder="输入你想要优化的提示词..." style="min-height: 150px;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">优化方向</label>
+                    <div class="tool-selector">
+                        <div class="tool-option selected" data-opt="clarity" onclick="selectOptimize(this)">
+                            <div class="tool-name">清晰明确</div>
+                            <div class="tool-version">让提示词更清晰易懂</div>
+                        </div>
+                        <div class="tool-option" data-opt="detail" onclick="selectOptimize(this)">
+                            <div class="tool-name">详细具体</div>
+                            <div class="tool-version">添加更多细节和约束</div>
+                        </div>
+                        <div class="tool-option" data-opt="structure" onclick="selectOptimize(this)">
+                            <div class="tool-name">结构化</div>
+                            <div class="tool-version">按步骤和格式组织</div>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="optimizePrompt()" style="width: 100%;">✨ 开始优化</button>
+            </div>
+            
+            <div class="card" id="optimizeResult" style="display: none;">
+                <div class="card-header">
+                    <h2 class="card-title">优化结果</h2>
+                </div>
+                <textarea class="form-textarea" id="optimizedPrompt" readonly style="min-height: 200px;"></textarea>
+                <div style="display: flex; gap: 8px; margin-top: 16px;">
+                    <button class="btn btn-primary" onclick="useOptimizedPrompt()">使用此提示词</button>
+                    <button class="btn btn-secondary" onclick="copyOptimizedPrompt()">复制</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 执行日志页面 -->
+        <section id="logs" class="page">
+            <div class="page-header">
+                <h1 class="page-title">📊 执行日志</h1>
+                <p class="page-subtitle">实时查看系统日志</p>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">📝 实时日志</h2>
+                    <button class="btn btn-secondary btn-sm" onclick="clearLogs()">🗑️ 清空</button>
+                </div>
+                <div class="log-output" id="logOutput">
+                    <div class="log-line log-info">等待日志...</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 添加项目对话框 -->
+    <div class="dialog-overlay" id="addProjectDialog">
+        <div class="dialog">
+            <div class="dialog-header">
+                <h3 class="dialog-title">➕ 添加项目</h3>
+                <button class="dialog-close" onclick="closeAddProjectDialog()">✕</button>
+            </div>
+            <div class="form-group">
+                <label class="form-label">项目路径</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" class="form-input" id="newProjectPath" placeholder="/path/to/project">
+                    <button class="btn btn-secondary" onclick="browseForProject()">📁</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">项目名称</label>
+                <input type="text" class="form-input" id="newProjectName" placeholder="自动识别">
+            </div>
+            <div class="form-group">
+                <label class="form-label">描述</label>
+                <textarea class="form-textarea" id="newProjectDesc" placeholder="项目描述..." style="min-height: 80px;"></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">标签（逗号分隔）</label>
+                <input type="text" class="form-input" id="newProjectTags" placeholder="python, web, api">
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-primary" onclick="confirmAddProject()" style="flex: 1;">添加</button>
+                <button class="btn btn-secondary" onclick="closeAddProjectDialog()" style="flex: 1;">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 目录浏览对话框 -->
+    <div class="dialog-overlay" id="browseDialog">
+        <div class="dialog" style="max-width: 600px;">
+            <div class="dialog-header">
+                <h3 class="dialog-title">📁 选择目录</h3>
+                <button class="dialog-close" onclick="closeBrowseDialog()">✕</button>
+            </div>
+            <div id="breadcrumb" style="margin-bottom: 16px; color: var(--primary); font-size: 13px;"></div>
+            <div id="fileList" style="display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto;"></div>
+            <div style="margin-top: 16px;">
+                <button class="btn btn-primary" onclick="confirmWorkspace()" style="width: 100%;">确认选择</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局状态
+        let tasks = {};
+        let projects = {};
+        let templates = {};
+        let wsConnections = {};
+        let selectedTool = 'opencode';
+        let selectedOptimize = 'clarity';
+        let currentBrowsePath = '~';
+        let browseCallback = null;
+
+        // 页面导航
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+                item.classList.add('active');
+                
+                const page = item.dataset.page;
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                document.getElementById(page).classList.add('active');
+            });
+        });
+
+        // 工具选择
+        function selectTool(el) {
+            document.querySelectorAll('.tool-option').forEach(t => t.classList.remove('selected'));
+            el.classList.add('selected');
+            selectedTool = el.dataset.tool;
+        }
+
+        // 优化方向选择
+        function selectOptimize(el) {
+            document.querySelectorAll('.tool-option').forEach(t => t.classList.remove('selected'));
+            el.classList.add('selected');
+            selectedOptimize = el.dataset.opt;
+        }
+
+        // 创建工作
+        async function createTask() {
+            const description = document.getElementById('taskDescription').value;
+            const workspace = document.getElementById('workspace').value;
+            const autoTest = document.getElementById('autoTest').checked;
+            const autoCommit = document.getElementById('autoCommit').checked;
+
+            if (!description.trim()) {
+                alert('请输入任务描述');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/tasks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        description,
+                        workspace,
+                        tool: selectedTool,
+                        auto_test: autoTest,
+                        auto_commit: autoCommit
+                    })
+                });
+
+                const data = await response.json();
+                addLog(`任务已创建：${data.task_id}`, 'success');
+                loadTasks();
+                
+                // 清空表单
+                document.getElementById('taskDescription').value = '';
+            } catch (error) {
+                addLog(`创建任务失败：${error.message}`, 'error');
+            }
+        }
+
+        // 加载任务
+        async function loadTasks() {
+            try {
+                const response = await fetch('/api/tasks');
+                const data = await response.json();
+                tasks = data.tasks.reduce((acc, task) => {
+                    acc[task.task_id] = task;
+                    return acc;
+                }, {});
+                renderTasks();
+                updateStats();
+            } catch (error) {
+                console.error('加载任务失败:', error);
+            }
+        }
+
+        // 渲染任务
+        function renderTasks() {
+            const container = document.getElementById('taskList');
+            const taskArray = Object.values(tasks);
+
+            if (taskArray.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📭</div>
+                        <div class="empty-text">暂无任务，创建一个吧！</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = taskArray.map(task => {
+                const dateStr = new Date(task.created_at).toLocaleString('zh-CN');
+                const toolBadge = task.tool === 'qwen' ? '🤖 Qwen' : '⚡ Opencode';
+                
+                return `
+                    <div class="task-card ${task.status}" style="margin-bottom: 16px;">
+                        <div class="task-header">
+                            <div>
+                                <div class="task-title">${escapeHtml(task.description)}</div>
+                                <div class="task-meta">${dateStr} | ${toolBadge}</div>
+                            </div>
+                            <span class="task-status status-${task.status}">${task.status}</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${task.progress || 0}%"></div>
+                        </div>
+                        ${task.subtasks && task.subtasks.length > 0 ? `
+                            <div style="font-size: 12px; color: var(--text-secondary);">
+                                子任务：${task.subtasks.filter(s => s.status === 'completed').length}/${task.subtasks.length} 完成
+                            </div>
+                        ` : ''}
+                        ${task.result && task.result.briefing ? `
+                            <div style="margin-top: 12px; padding: 12px; background: rgba(0,255,136,0.1); border-radius: 8px; font-size: 13px;">
+                                <strong>📊 任务简报:</strong><br>
+                                ${escapeHtml(task.result.briefing.substring(0, 200))}${task.result.briefing.length > 200 ? '...' : ''}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 更新统计
+        function updateStats() {
+            const taskArray = Object.values(tasks);
+            document.getElementById('statTotal').textContent = taskArray.length;
+            document.getElementById('statCompleted').textContent = taskArray.filter(t => t.status === 'completed').length;
+            document.getElementById('statRunning').textContent = taskArray.filter(t => t.status === 'running').length;
+            document.getElementById('statFailed').textContent = taskArray.filter(t => t.status === 'failed').length;
+        }
+
+        // 加载项目
+        async function loadProjects() {
+            try {
+                const response = await fetch('/api/projects');
+                const data = await response.json();
+                projects = data.projects.reduce((acc, p) => {
+                    acc[p.id || p.path] = p;
+                    return acc;
+                }, {});
+                renderProjects();
+            } catch (error) {
+                console.error('加载项目失败:', error);
+            }
+        }
+
+        // 渲染项目
+        function renderProjects() {
+            const container = document.getElementById('projectList');
+            const projectArray = Object.values(projects);
+
+            if (projectArray.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <div class="empty-icon">📂</div>
+                        <div class="empty-text">暂无项目，添加一个吧！</div>
+                        <button class="btn btn-primary" onclick="showAddProjectDialog()">➕ 添加项目</button>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = projectArray.map(p => {
+                const tags = (p.tags || []).map(t => `<span class="tag">${t}</span>`).join('');
+                const typeIcon = p.metadata?.has_python ? '🐍' : p.metadata?.has_node ? '📦' : '📁';
+                
+                return `
+                    <div class="project-card">
+                        <div class="project-name">
+                            <span>${typeIcon}</span>
+                            <span>${p.name || p.path.split('/').pop()}</span>
+                        </div>
+                        <div class="project-path">${p.path}</div>
+                        <div class="project-tags">${tags}</div>
+                        <div class="project-actions">
+                            <button class="btn btn-primary btn-sm" onclick="selectProjectAsWorkspace('${p.path}')" style="flex: 1;">使用</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteProject('${p.id || p.path}')" style="flex: 1;">删除</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // 添加项目
+        function showAddProjectDialog() {
+            document.getElementById('addProjectDialog').classList.add('active');
+        }
+
+        function closeAddProjectDialog() {
+            document.getElementById('addProjectDialog').classList.remove('active');
+        }
+
+        async function confirmAddProject() {
+            const path = document.getElementById('newProjectPath').value;
+            const name = document.getElementById('newProjectName').value;
+            const description = document.getElementById('newProjectDesc').value;
+            const tags = document.getElementById('newProjectTags').value.split(',').map(t => t.trim()).filter(t => t);
+
+            if (!path) {
+                alert('请输入项目路径');
+                return;
+            }
+
+            try {
+                const params = new URLSearchParams({ path });
+                if (name) params.append('name', name);
+                if (description) params.append('description', description);
+                if (tags.length) params.append('tags', JSON.stringify(tags));
+
+                const response = await fetch(`/api/projects?${params}`, { method: 'POST' });
+                const data = await response.json();
+                addLog(`项目已添加：${data.project.name}`, 'success');
+                closeAddProjectDialog();
+                loadProjects();
+
+                // 清空表单
+                document.getElementById('newProjectPath').value = '';
+                document.getElementById('newProjectName').value = '';
+                document.getElementById('newProjectDesc').value = '';
+                document.getElementById('newProjectTags').value = '';
+            } catch (error) {
+                addLog(`添加项目失败：${error.message}`, 'error');
+            }
+        }
+
+        async function deleteProject(projectId) {
+            if (!confirm('确定要删除这个项目吗？')) return;
+            try {
+                await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
+                addLog('项目已删除', 'success');
+                loadProjects();
+            } catch (error) {
+                addLog(`删除失败：${error.message}`, 'error');
+            }
+        }
+
+        function selectProjectAsWorkspace(path) {
+            document.getElementById('workspace').value = path;
+            addLog(`已设置工作目录：${path}`, 'info');
+        }
+
+        // 加载工作目录
+        async function loadWorkspaces() {
+            try {
+                const response = await fetch('/api/workspaces');
+                const data = await response.json();
+                const select = document.getElementById('workspaceSelect');
+                
+                select.innerHTML = '<option value="">选择常用目录...</option>' + 
+                    data.workspaces.map(w => `<option value="${w.path}">${w.name}</option>`).join('');
+            } catch (error) {
+                console.error('加载工作目录失败:', error);
+            }
+        }
+
+        function onWorkspaceChange() {
+            const select = document.getElementById('workspaceSelect');
+            if (select.value) {
+                document.getElementById('workspace').value = select.value;
+            }
+        }
+
+        // 浏览目录
+        async function browseWorkspace() {
+            currentBrowsePath = document.getElementById('workspace').value || '~';
+            browseCallback = (path) => {
+                document.getElementById('workspace').value = path;
+            };
+            document.getElementById('browseDialog').classList.add('active');
+            await loadDirectory(currentBrowsePath);
+        }
+
+        async function browseForProject() {
+            currentBrowsePath = document.getElementById('newProjectPath').value || '~';
+            browseCallback = (path) => {
+                document.getElementById('newProjectPath').value = path;
+            };
+            document.getElementById('browseDialog').classList.add('active');
+            await loadDirectory(currentBrowsePath);
+        }
+
+        function closeBrowseDialog() {
+            document.getElementById('browseDialog').classList.remove('active');
+        }
+
+        async function loadDirectory(path) {
+            try {
+                const response = await fetch(`/api/filesystem/ls?path=${encodeURIComponent(path)}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    document.getElementById('fileList').innerHTML = `<div style="color: var(--error);">${data.error}</div>`;
+                    return;
+                }
+                
+                currentBrowsePath = data.current_path;
+                document.getElementById('breadcrumb').textContent = data.current_path;
+                
+                const items = data.items || [];
+                const fileList = document.getElementById('fileList');
+                
+                let html = '';
+                
+                if (data.parent_path) {
+                    html += `<div onclick="loadDirectory('${data.parent_path}')" class="project-card" style="cursor: pointer;">
+                        <div class="project-name"><span>📁</span><span>.. (父目录)</span></div>
+                    </div>`;
+                }
+                
+                items.filter(i => i.type === 'directory').forEach(item => {
+                    const icon = item.is_project ? '📦' : '📁';
+                    html += `<div onclick="loadDirectory('${item.path}')" class="project-card" style="cursor: pointer;">
+                        <div class="project-name"><span>${icon}</span><span>${item.name}</span>${item.is_project ? '<span class="tag" style="margin-left: auto;">项目</span>' : ''}</div>
+                    </div>`;
+                });
+                
+                fileList.innerHTML = html;
+            } catch (error) {
+                console.error('加载目录失败:', error);
+            }
+        }
+
+        function confirmWorkspace() {
+            if (browseCallback) {
+                browseCallback(currentBrowsePath);
+            }
+            closeBrowseDialog();
+        }
+
+        // 日志
+        function addLog(message, type = 'info') {
+            const output = document.getElementById('logOutput');
+            const time = new Date().toLocaleTimeString();
+            const className = `log-${type}`;
+            output.innerHTML += `<div class="log-line ${className}">[${time}] ${escapeHtml(message)}</div>`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('logOutput').innerHTML = '<div class="log-line log-info">日志已清空</div>';
+        }
+
+        // 工具函数
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // WebSocket 连接
+        function connectWebSocket(taskId) {
+            if (wsConnections[taskId]) return;
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${protocol}//${window.location.host}/ws/tasks/${taskId}`);
+            
+            ws.onopen = () => addLog(`WebSocket 已连接：${taskId}`, 'info');
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'heartbeat') return;
+                
+                if (data.task_id && tasks[data.task_id]) {
+                    tasks[data.task_id].status = data.status;
+                    tasks[data.task_id].progress = data.progress;
+                    tasks[data.task_id].subtasks = data.subtasks;
+                    renderTasks();
+                    updateStats();
+                }
+                
+                if (data.type && data.type !== 'log') {
+                    const typeMap = {
+                        'task.completed': 'success',
+                        'task.failed': 'error',
+                        'task.progress': 'info',
+                    };
+                    addLog(`${data.type}`, typeMap[data.type] || 'info');
+                }
+            };
+            
+            ws.onclose = () => {
+                addLog(`WebSocket 已断开：${taskId}`, 'warning');
+                delete wsConnections[taskId];
+            };
+            
+            wsConnections[taskId] = ws;
+        }
+
+        // 提示词优化
+        async function optimizePrompt() {
+            const original = document.getElementById('originalPrompt').value;
+            if (!original.trim()) {
+                alert('请输入原始提示词');
+                return;
+            }
+
+            addLog('开始优化提示词...', 'info');
+            
+            // 模拟优化（实际应该调用 API）
+            const optimizePrompts = {
+                'clarity': `请优化以下提示词，使其更加清晰明确：\n\n${original}`,
+                'detail': `请为以下提示词添加更多细节和约束条件：\n\n${original}`,
+                'structure': `请将以下提示词按步骤和结构化格式重新组织：\n\n${original}`
+            };
+
+            // 这里应该调用实际的优化 API
+            // 暂时模拟结果
+            setTimeout(() => {
+                const optimized = `[优化后的提示词]\n\n${original}\n\n请确保：\n1. 代码结构清晰，遵循最佳实践\n2. 添加必要的注释和文档\n3. 包含完整的错误处理\n4. 提供使用示例`;
+                document.getElementById('optimizedPrompt').value = optimized;
+                document.getElementById('optimizeResult').style.display = 'block';
+                addLog('提示词优化完成', 'success');
+            }, 1000);
+        }
+
+        function useOptimizedPrompt() {
+            const optimized = document.getElementById('optimizedPrompt').value;
+            document.getElementById('taskDescription').value = optimized;
+            document.querySelectorAll('.nav-item')[0].click();
+            addLog('已使用优化后的提示词', 'success');
+        }
+
+        function copyOptimizedPrompt() {
+            const text = document.getElementById('optimizedPrompt').value;
+            navigator.clipboard.writeText(text);
+            addLog('已复制到剪贴板', 'success');
+        }
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            loadWorkspaces();
+            loadProjects();
+            loadTasks();
+            addLog('Web UI 已就绪', 'success');
+        });
+    </script>
+</body>
+</html>

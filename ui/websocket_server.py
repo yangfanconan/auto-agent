@@ -23,17 +23,20 @@ except ImportError:
 
 try:
     from ..utils import get_logger, load_config
-    from ..core.console_io import IOMessage, IOType, IOSource
-    from ..core.events import subscribe_async, publish_event
 except ImportError:
     from utils import get_logger, load_config
+
+try:
+    from ..core.console_io import IOMessage, IOType, IOSource
+    from ..core.events import get_event_bus, publish_event
+except ImportError:
     from core.console_io import IOMessage, IOType, IOSource
-    from core.events import subscribe_async, publish_event
+    from core.events import get_event_bus, publish_event
 
 
 class WebSocketManager:
     """WebSocket 连接管理器"""
-    
+
     def __init__(
         self,
         host: str = "0.0.0.0",
@@ -46,20 +49,67 @@ class WebSocketManager:
         self.port = port
         self.heartbeat_interval = heartbeat_interval
         self.on_message = on_message
-        
+
         # 连接管理
         self.connections: Dict[str, WebSocketServerProtocol] = {}
         self.connection_info: Dict[str, Dict] = {}
-        
+
         # 状态
         self._server = None
         self._running = False
         self._stop_event = asyncio.Event()
-        
-        # 消息队列
-        self._broadcast_queue = asyncio.Queue()
-        
+
+        # 消息队列（异步队列 + 线程安全队列）
+        self._broadcast_queue: asyncio.Queue = asyncio.Queue()
+        self._thread_safe_queue = None  # 延迟初始化
+        self._event_loop = None  # 存储 WebSocket 的事件循环
+
         self.logger.info(f"WebSocketManager 已初始化 (host={host}, port={port})")
+
+    def get_thread_safe_queue(self):
+        """获取线程安全的消息队列"""
+        if self._thread_safe_queue is None:
+            import queue
+            self._thread_safe_queue = queue.Queue()
+        return self._thread_safe_queue
+
+    def broadcast_from_thread(self, message: Dict):
+        """
+        从任意线程安全地广播消息
+        
+        这个方法可以从任何线程调用，消息会被安全地转发到 WebSocket
+        """
+        try:
+            # 放入线程安全队列
+            ts_queue = self.get_thread_safe_queue()
+            ts_queue.put(message)
+            self.logger.debug(f"消息已放入线程安全队列: {message.get('type', 'unknown')}")
+            
+            # 如果有事件循环，调度一个任务来处理队列
+            if self._event_loop:
+                if self._event_loop.is_running():
+                    self._event_loop.call_soon_threadsafe(self._process_thread_queue)
+                    self.logger.debug("已调度 _process_thread_queue")
+                else:
+                    self.logger.warning("事件循环未运行")
+            else:
+                self.logger.warning("事件循环未设置")
+        except Exception as e:
+            self.logger.error(f"线程安全广播失败：{e}")
+
+    def _process_thread_queue(self):
+        """处理线程安全队列中的消息（在 WebSocket 事件循环中调用）"""
+        try:
+            ts_queue = self.get_thread_safe_queue()
+            while not ts_queue.empty():
+                try:
+                    message = ts_queue.get_nowait()
+                    # 放入异步广播队列
+                    self._broadcast_queue.put_nowait(message)
+                except:
+                    break
+        except Exception as e:
+            self.logger.error(f"处理线程队列失败：{e}")
     
     async def start_server(self):
         """启动 WebSocket 服务器"""
@@ -75,11 +125,17 @@ class WebSocketManager:
                 ping_interval=self.heartbeat_interval,
                 ping_timeout=10,
             )
+            # 保存当前事件循环（用于跨线程调度）
+            self._event_loop = asyncio.get_running_loop()
+
             self._running = True
             self.logger.info(f"WebSocket 服务器已启动：ws://{self.host}:{self.port}")
             
             # 启动广播任务
             asyncio.create_task(self._broadcast_loop())
+
+            # 启动线程队列处理任务
+            asyncio.create_task(self._thread_queue_processor())
             
             # 等待停止信号
             await self._stop_event.wait()
@@ -148,6 +204,11 @@ class WebSocketManager:
             
             self.logger.debug(f"收到 WebSocket 消息 [{ws_id}]: {msg_type}")
             
+            # 处理心跳
+            if msg_type == 'ping':
+                await self._send_to_connection(ws_id, {"type": "pong"})
+                return
+
             # 调用回调
             if self.on_message:
                 try:
@@ -228,6 +289,17 @@ class WebSocketManager:
         """获取连接数"""
         return len(self.connections)
     
+
+    async def _thread_queue_processor(self):
+        """定期处理线程安全队列中的消息"""
+        while self._running:
+            try:
+                self._process_thread_queue()
+                await asyncio.sleep(0.05)  # 50ms 检查一次
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                self.logger.error(f"线程队列处理异常：{e}")
     def get_connection_info(self) -> Dict:
         """获取连接信息"""
         return {
@@ -238,7 +310,7 @@ class WebSocketManager:
 
 class WebSocketIOBridge:
     """WebSocket IO 桥接器 - 连接 ConsoleIO 和 WebSocket"""
-    
+
     def __init__(
         self,
         websocket_manager: WebSocketManager,
@@ -247,42 +319,58 @@ class WebSocketIOBridge:
         self.logger = get_logger()
         self.ws_manager = websocket_manager
         self.console_io = console_redirector
-        
-        # 订阅事件
+
+        # 订阅事件（使用同步订阅）
         self._setup_event_subscribers()
-        
+
         self.logger.info("WebSocketIOBridge 已初始化")
-    
+
     def _setup_event_subscribers(self):
         """设置事件订阅"""
-        # 订阅 IO 消息
-        subscribe_async("system.io", self._on_io_message)
-        subscribe_async("task.started", self._on_task_event)
-        subscribe_async("task.completed", self._on_task_event)
-        subscribe_async("task.failed", self._on_task_event)
-        subscribe_async("tool.called", self._on_tool_event)
-    
-    async def _on_io_message(self, event):
-        """处理 IO 消息"""
+        bus = get_event_bus()
+        # 订阅所有相关事件
+        bus.subscribe("system.io", self._on_io_message_sync)
+        bus.subscribe("task.started", self._on_task_event_sync)
+        bus.subscribe("task.completed", self._on_task_event_sync)
+        bus.subscribe("task.failed", self._on_task_event_sync)
+        bus.subscribe("task.submitted", self._on_task_event_sync)
+        bus.subscribe("plan.submitted", self._on_task_event_sync)
+        bus.subscribe("tool.status_changed", self._on_tool_event_sync)
+        bus.subscribe("decision.made", self._on_decision_event_sync)
+
+    def _broadcast(self, message: Dict):
+        """线程安全地广播消息"""
+        self.ws_manager.broadcast_from_thread(message)
+
+    def _on_io_message_sync(self, event):
+        """处理 IO 消息（同步）"""
         payload = event.payload
-        await self.ws_manager.send_message({
+        self._broadcast({
             "type": "io",
             "event": payload.get("type", "output"),
             "data": payload,
         })
-    
-    async def _on_task_event(self, event):
-        """处理任务事件"""
-        await self.ws_manager.send_message({
+
+    def _on_task_event_sync(self, event):
+        """处理任务事件（同步）"""
+        self._broadcast({
             "type": "task",
             "event": event.type,
             "data": event.payload,
         })
-    
-    async def _on_tool_event(self, event):
-        """处理工具事件"""
-        await self.ws_manager.send_message({
+
+    def _on_tool_event_sync(self, event):
+        """处理工具事件（同步）"""
+        self._broadcast({
             "type": "tool",
+            "event": event.type,
+            "data": event.payload,
+        })
+
+    def _on_decision_event_sync(self, event):
+        """处理决策事件（同步）"""
+        self._broadcast({
+            "type": "decision",
             "event": event.type,
             "data": event.payload,
         })
