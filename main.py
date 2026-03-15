@@ -606,9 +606,10 @@ def run_webui(host: str, port: int, websocket_port: int = 8765):
             try:
                 from core.tool_scheduler import get_scheduler
                 scheduler = get_scheduler()
-                return scheduler.list_tasks()
+                tasks = scheduler.list_tasks()
+                return {"tasks": tasks}
             except Exception as e:
-                return {"error": str(e)}
+                return {"tasks": [], "error": str(e)}
         
         @app.post("/api/tasks")
         async def create_task(task_data: dict):
