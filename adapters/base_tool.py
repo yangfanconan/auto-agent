@@ -411,7 +411,8 @@ class OpenCodeTool(BaseTool):
                     self._current_task_id
                 )
 
-            
+            return result
+
         except asyncio.TimeoutError:
             if self._process:
                 self._process.kill()
