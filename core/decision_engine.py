@@ -139,9 +139,16 @@ class RuleEngine:
             },
             {
                 "name": "error_state",
-                "condition": lambda ctx: ctx.tool_status == ToolStatus.ERROR,
-                "action": DecisionType.CALL_QWEN,
-                "reason": "工具异常，请求 Qwen 诊断",
+                "condition": lambda ctx: ctx.tool_status == ToolStatus.ERROR and ctx.retry_count < ctx.max_retries,
+                "action": DecisionType.AUTO_RETRY,
+                "reason": "工具异常，自动重试",
+                "risk_level": RiskLevel.LOW,
+            },
+            {
+                "name": "error_state_max_retries",
+                "condition": lambda ctx: ctx.tool_status == ToolStatus.ERROR and ctx.retry_count >= ctx.max_retries,
+                "action": DecisionType.SWITCH_TOOL,
+                "reason": "工具异常且超过重试次数，切换工具",
                 "risk_level": RiskLevel.MEDIUM,
             },
             {
@@ -248,12 +255,20 @@ class QwenDecisionEngine:
 
         except Exception as e:
             self.logger.error(f"Qwen 决策失败：{e}")
-            # 降级为默认决策
-            return DecisionResult(
-                decision_type=DecisionType.WAIT_USER,
-                reason=f"Qwen 决策失败：{e}，等待用户确认",
-                risk_level=RiskLevel.HIGH,
-            )
+            # 降级为自动重试（不等待用户）
+            if context.retry_count < context.max_retries:
+                return DecisionResult(
+                    decision_type=DecisionType.AUTO_RETRY,
+                    reason=f"Qwen 决策失败：{e}，自动重试",
+                    risk_level=RiskLevel.LOW,
+                )
+            else:
+                # 超过重试次数，切换工具
+                return DecisionResult(
+                    decision_type=DecisionType.SWITCH_TOOL,
+                    reason=f"Qwen 决策失败且超过重试次数，切换工具",
+                    risk_level=RiskLevel.MEDIUM,
+                )
 
     def _build_decision_prompt(self, context: DecisionContext) -> str:
         """构建决策提示词"""
@@ -305,7 +320,7 @@ class QwenDecisionEngine:
             import subprocess
             try:
                 result = subprocess.run(
-                    ["qwen", "-p", prompt],
+                    ["qwen", "--yolo", prompt],
                     capture_output=True,
                     text=True,
                     timeout=60
