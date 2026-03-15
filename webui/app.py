@@ -216,7 +216,7 @@ def register_routes(app: FastAPI):
             "version": config.version,
             "workspace": config.workspace,
             "opencode_enabled": config.opencode.enabled,
-            "qwencode_enabled": config.qwencode.enabled,
+            "qwen_enabled": config.qwen.enabled,
             "git_auto_commit": config.git.auto_commit,
             "test_auto_test": config.test.auto_test,
         }
@@ -566,7 +566,7 @@ async def execute_task(task_id: str, request: TaskRequest):
         # 设置工具偏好
         if request.tool == "qwen":
             from adapters import get_tool as get_adapter_tool
-            agent._code_generator.qwencode = get_adapter_tool("qwencode")
+            agent._code_generator.qwen = get_adapter_tool("qwen")
         
         current_agent = agent
 

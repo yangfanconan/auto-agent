@@ -63,7 +63,7 @@ class AgentConfig:
     version: str = "1.0.0"
     workspace: str = ""
     opencode: ToolConfig = field(default_factory=ToolConfig)
-    qwencode: ToolConfig = field(default_factory=ToolConfig)
+    qwen: ToolConfig = field(default_factory=ToolConfig)
     git: GitConfig = field(default_factory=GitConfig)
     test: TestConfig = field(default_factory=TestConfig)
     environment: EnvironmentConfig = field(default_factory=EnvironmentConfig)
@@ -113,11 +113,11 @@ class AgentConfig:
                 'timeout': self.opencode.timeout,
                 'max_retries': self.opencode.max_retries,
             },
-            'qwencode': {
-                'enabled': self.qwencode.enabled,
-                'path': self.qwencode.path,
-                'timeout': self.qwencode.timeout,
-                'max_retries': self.qwencode.max_retries,
+            'qwen': {
+                'enabled': self.qwen.enabled,
+                'path': self.qwen.path,
+                'timeout': self.qwen.timeout,
+                'max_retries': self.qwen.max_retries,
             },
             'git': {
                 'auto_commit': self.git.auto_commit,

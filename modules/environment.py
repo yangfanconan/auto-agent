@@ -41,7 +41,7 @@ class EnvironmentReport:
     node_version: Optional[str]
     git_version: Optional[str]
     opencode_available: bool
-    qwencode_available: bool
+    qwen_available: bool
     components: List[EnvironmentStatus] = field(default_factory=list)
     issues: List[str] = field(default_factory=list)
     recommendations: List[str] = field(default_factory=list)
@@ -53,7 +53,7 @@ class EnvironmentReport:
             "node_version": self.node_version,
             "git_version": self.git_version,
             "opencode_available": self.opencode_available,
-            "qwencode_available": self.qwencode_available,
+            "qwen_available": self.qwen_available,
             "components": [c.__dict__ for c in self.components],
             "issues": self.issues,
             "recommendations": self.recommendations
@@ -306,21 +306,21 @@ class EnvironmentManager:
             issues.append("Opencode 不可用")
             recommendations.append("检查 Opencode 安装路径配置")
         
-        # Qwencode
-        qwencode = get_tool("qwencode")
-        qwencode_available = qwencode is not None and hasattr(qwencode, 'is_available') and qwencode.is_available
-        qwencode_status = EnvironmentStatus(
-            component="Qwencode",
-            installed=qwencode_available,
-            version=qwencode.version if qwencode_available else None,
-            path=str(qwencode._path) if qwencode_available else None,
-            status="ok" if qwencode_available else "warning",
-            message="Qwencode 可用" if qwencode_available else "Qwencode 未找到（可选）",
+        # Qwen
+        qwen = get_tool("qwen")
+        qwen_available = qwen is not None and hasattr(qwen, 'is_available') and qwen.is_available
+        qwen_status = EnvironmentStatus(
+            component="Qwen",
+            installed=qwen_available,
+            version=qwen.version if qwen_available else None,
+            path=str(qwen._path) if qwen_available else None,
+            status="ok" if qwen_available else "warning",
+            message="Qwen 可用" if qwen_available else "Qwen 未找到",
             auto_fixable=True
         )
-        components.append(qwencode_status)
-        if not qwencode_available:
-            recommendations.append("Qwencode 为可选工具，安装后可支持批量代码生成")
+        components.append(qwen_status)
+        if not qwen_available:
+            recommendations.append("Qwen 为可选工具，安装后可支持批量代码生成")
         
         # 检查 Python 依赖
         self._check_python_dependencies(components, issues, recommendations)
@@ -335,7 +335,7 @@ class EnvironmentManager:
             node_version=node_version.strip().lstrip('v') if node_version else None,
             git_version=git_version.split()[-1] if git_version else None,
             opencode_available=opencode_available,
-            qwencode_available=qwencode_available,
+            qwen_available=qwen_available,
             components=components,
             issues=issues,
             recommendations=recommendations
@@ -545,7 +545,7 @@ class EnvironmentManager:
             result += f"Node.js: {report.node_version or '未安装'}\n"
             result += f"Git: {report.git_version or '未安装'}\n"
             result += f"Opencode: {'可用' if report.opencode_available else '不可用'}\n"
-            result += f"Qwencode: {'可用' if report.qwencode_available else '不可用'}\n"
+            result += f"Qwen: {'可用' if report.qwen_available else '不可用'}\n"
             
             if report.issues:
                 result += f"\n问题：{', '.join(report.issues)}"

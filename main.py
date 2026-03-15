@@ -191,7 +191,7 @@ def check_environment(workspace: str):
     print(f"Node.js: {report.node_version or '未安装'}")
     print(f"Git: {report.git_version or '未安装'}")
     print(f"Opencode: {'✅ 可用' if report.opencode_available else '❌ 不可用'}")
-    print(f"Qwencode: {'✅ 可用' if report.qwencode_available else '⚠️ 可选'}")
+    print(f"Qwen: {'✅ 可用' if report.qwen_available else '⚠️ 可选'}")
     
     if report.issues:
         print(f"\n⚠️  发现问题:")

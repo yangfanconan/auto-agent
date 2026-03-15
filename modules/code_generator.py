@@ -14,12 +14,12 @@ import os
 try:
     from ..utils import get_logger, CodeGenerationException
     from ..utils.cache import get_cache
-    from ..adapters import get_tool, OpencodeAdapter, QwencodeAdapter
+    from ..adapters import get_tool, OpencodeAdapter, QwenAdapter
     from ..core.task_parser import PROJECT_TEMPLATES
 except ImportError:
     from utils import get_logger, CodeGenerationException
     from utils.cache import get_cache
-    from adapters import get_tool, OpencodeAdapter, QwencodeAdapter
+    from adapters import get_tool, OpencodeAdapter, QwenAdapter
     from core.task_parser import PROJECT_TEMPLATES
 
 
@@ -80,7 +80,7 @@ class CodeGenerator:
 
         # 获取工具适配器
         self.opencode = get_tool("opencode")
-        self.qwencode = get_tool("qwencode")
+        self.qwen = get_tool("qwen")
 
         # 生成的文件记录
         self._generated_files: List[CodeFile] = []
@@ -381,23 +381,23 @@ if __name__ == "__main__":
             except Exception as e:
                 self.logger.warning(f"使用 opencode 生成代码失败：{e}")
 
-        # 降级方案：使用 qwencode
-        return self._generate_with_qwencode(description, language)
-    
-    def _generate_with_qwencode(self, description: str, language: str) -> Optional[str]:
-        """使用 qwencode 生成代码（降级方案）"""
-        if self.qwencode and hasattr(self.qwencode, 'generate_code'):
+        # 降级方案：使用 qwen
+        return self._generate_with_qwen(description, language)
+
+    def _generate_with_qwen(self, description: str, language: str) -> Optional[str]:
+        """使用 qwen 生成代码（降级方案）"""
+        if self.qwen and hasattr(self.qwen, 'generate_code'):
             try:
-                result = self.qwencode.generate_code(description, language)
-                
+                result = self.qwen.generate_code(description, language)
+
                 if result.success:
                     return result.output
                 else:
-                    self.logger.warning(f"Qwencode 调用失败：{result.error}")
-            
+                    self.logger.warning(f"Qwen 调用失败：{result.error}")
+
             except Exception as e:
-                self.logger.warning(f"使用 qwencode 生成代码失败：{e}")
-        
+                self.logger.warning(f"使用 qwen 生成代码失败：{e}")
+
         # 如果都失败，返回基础代码框架
         return self._generate_basic_framework(description, language)
     
@@ -539,9 +539,9 @@ module.exports = {{ main }};
             with open(file_path, 'r', encoding='utf-8') as f:
                 original_code = f.read()
             
-            # 使用 qwencode 优化
-            if self.qwencode and hasattr(self.qwencode, 'optimize_code'):
-                opt_result = self.qwencode.optimize_code(original_code, "python", optimization_level)
+            # 使用 qwen 优化
+            if self.qwen and hasattr(self.qwen, 'optimize_code'):
+                opt_result = self.qwen.optimize_code(original_code, "python", optimization_level)
                 
                 if opt_result.success:
                     # 保存优化后的代码
