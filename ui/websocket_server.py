@@ -466,9 +466,9 @@ class WebSocketIOBridge:
             # 执行任务
             await scheduler.execute_next()
 
-            # 等待任务完成
+            # 等待任务完成（最多 5 分钟）
             import asyncio
-            for _ in range(300):  # 最多等待 30 秒
+            for _ in range(3000):  # 最多等待 5 分钟
                 task = scheduler.get_task(task_id)
                 if task and task.status.value in ["completed", "failed", "cancelled"]:
                     # 广播任务结果

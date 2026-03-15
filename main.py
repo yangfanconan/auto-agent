@@ -473,17 +473,13 @@ def start_enhanced_features(
     if enable_websocket:
         from ui.websocket_server import WebSocketIOBridge
         io_bridge = WebSocketIOBridge(_ws_manager)
+        # 设置 WebSocket 消息处理（必须在创建 io_bridge 后立即设置）
+        _ws_manager.on_message = io_bridge.handle_websocket_message
         print(f"📡 WebSocket IO 桥接器已启用")
 
     # 启动控制台 IO 接管
     if enable_console_redirect:
         from core.console_io import start_console_capture, IOMessage
-
-        # 设置 WebSocket 消息处理
-        _ws_manager.on_message = io_bridge.handle_websocket_message
-
-        # 设置 WebSocket 消息处理
-        _ws_manager.on_message = io_bridge.handle_websocket_message
 
         # 消息队列（线程安全）
         _message_queue = queue.Queue()
