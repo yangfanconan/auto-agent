@@ -709,6 +709,54 @@ def run_webui(host: str, port: int, websocket_port: int = 8765):
             except Exception as e:
                 return {"error": str(e)}
 
+        @app.get("/api/filesystem/ls")
+        async def list_directory(path: str = "."):
+            """列出目录内容"""
+            try:
+                from pathlib import Path
+                import os
+
+                # 处理特殊路径
+                if path == "~" or path == "undefined":
+                    path = str(Path.home())
+
+                target_path = Path(path).expanduser().resolve()
+
+                # 安全检查：确保路径存在且是目录
+                if not target_path.exists():
+                    return {"error": f"路径不存在: {path}", "current_path": str(target_path)}
+
+                if not target_path.is_dir():
+                    return {"error": f"不是目录: {path}", "current_path": str(target_path)}
+
+                items = []
+                for item in target_path.iterdir():
+                    try:
+                        stat = item.stat()
+                        items.append({
+                            "name": item.name,
+                            "path": str(item),
+                            "type": "directory" if item.is_dir() else "file",
+                            "size": stat.st_size if item.is_file() else None,
+                            "modified": stat.st_mtime,
+                        })
+                    except (PermissionError, OSError):
+                        continue
+
+                # 排序：目录在前，文件在后
+                items.sort(key=lambda x: (0 if x["type"] == "directory" else 1, x["name"].lower()))
+
+                # 获取父目录
+                parent_path = str(target_path.parent) if target_path.parent != target_path else None
+
+                return {
+                    "current_path": str(target_path),
+                    "parent_path": parent_path,
+                    "items": items
+                }
+            except Exception as e:
+                return {"error": str(e), "current_path": path}
+
         print(f"\n🌐 Web UI 已启动!")
         print(f"   访问地址：http://{host}:{port}")
         print(f"   WebSocket: ws://{host}:{websocket_port}")
