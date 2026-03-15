@@ -672,6 +672,38 @@
         let currentBrowsePath = '~';
         let browseCallback = null;
 
+        // 通用弹窗函数
+        function showModal(title, content) {
+            // 创建弹窗元素
+            const modalId = 'dynamicModal_' + Date.now();
+            const modalHtml = `
+                <div class="dialog-overlay active" id="${modalId}">
+                    <div class="dialog" style="max-width: 800px; max-height: 90vh;">
+                        <div class="dialog-header">
+                            <h3 class="dialog-title">${escapeHtml(title)}</h3>
+                            <button class="dialog-close" onclick="closeModal('${modalId}')">✕</button>
+                        </div>
+                        <div class="dialog-body" style="max-height: 70vh; overflow-y: auto;">
+                            ${content}
+                        </div>
+                        <div class="dialog-footer" style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
+                            <button class="btn btn-secondary" onclick="closeModal('${modalId}')">关闭</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // 添加到页面
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+        }
+
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.remove();
+            }
+        }
+
         // 页面导航
         document.querySelectorAll('.nav-item').forEach(item => {
             item.addEventListener('click', () => {
@@ -776,7 +808,10 @@
                                 <div class="task-title">${escapeHtml(task.description)}</div>
                                 <div class="task-meta">${dateStr} | ${toolBadge}</div>
                             </div>
-                            <span class="task-status status-${task.status}">${task.status}</span>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <button class="btn btn-secondary btn-sm" onclick="showTaskDetail('${task.id}')">📋 详情</button>
+                                <span class="task-status status-${task.status}">${task.status}</span>
+                            </div>
                         </div>
                         <div class="progress-bar">
                             <div class="progress-fill" style="width: ${task.progress || 0}%"></div>
@@ -786,15 +821,63 @@
                                 子任务：${task.subtasks.filter(s => s.status === 'completed').length}/${task.subtasks.length} 完成
                             </div>
                         ` : ''}
-                        ${task.result && task.result.briefing ? `
-                            <div style="margin-top: 12px; padding: 12px; background: rgba(0,255,136,0.1); border-radius: 8px; font-size: 13px;">
-                                <strong>📊 任务简报:</strong><br>
-                                ${escapeHtml(task.result.briefing.substring(0, 200))}${task.result.briefing.length > 200 ? '...' : ''}
-                            </div>
-                        ` : ''}
                     </div>
                 `;
             }).join('');
+        }
+
+        // 显示任务详情
+        function showTaskDetail(taskId) {
+            const task = tasks[taskId];
+            if (!task) {
+                alert('任务不存在');
+                return;
+            }
+
+            const detailHtml = `
+                <div style="max-height: 70vh; overflow-y: auto;">
+                    <h3>📋 任务详情</h3>
+                    <div style="margin: 16px 0;">
+                        <strong>ID:</strong> ${task.id}<br>
+                        <strong>描述:</strong> ${escapeHtml(task.description)}<br>
+                        <strong>工具:</strong> ${task.tool}<br>
+                        <strong>状态:</strong> <span class="task-status status-${task.status}">${task.status}</span><br>
+                        <strong>进度:</strong> ${task.progress || 0}%<br>
+                        <strong>创建时间:</strong> ${new Date(task.created_at).toLocaleString('zh-CN')}<br>
+                        ${task.completed_at ? `<strong>完成时间:</strong> ${new Date(task.completed_at).toLocaleString('zh-CN')}<br>` : ''}
+                        ${task.error ? `<strong style="color: var(--error);">错误:</strong> ${escapeHtml(task.error)}<br>` : ''}
+                    </div>
+                    
+                    ${task.result ? `
+                        <div style="margin-top: 20px; padding: 16px; background: rgba(0,217,255,0.1); border-radius: 8px;">
+                            <h4>📊 执行结果</h4>
+                            <div style="margin-top: 12px;">
+                                <strong>成功:</strong> ${task.result.success ? '✅ 是' : '❌ 否'}<br>
+                                <strong>退出码:</strong> ${task.result.exit_code}<br>
+                                ${task.result.duration ? `<strong>耗时:</strong> ${task.result.duration.toFixed(2)}秒<br>` : ''}
+                                ${task.result.output ? `<div style="margin-top: 12px;"><strong>输出:</strong><pre style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 4px; overflow-x: auto; margin-top: 8px; font-size: 12px;">${escapeHtml(task.result.output)}</pre></div>` : ''}
+                                ${task.result.error ? `<div style="margin-top: 12px; color: var(--error);"><strong>错误信息:</strong><pre style="background: rgba(255,0,0,0.1); padding: 12px; border-radius: 4px; overflow-x: auto; margin-top: 8px; font-size: 12px;">${escapeHtml(task.result.error)}</pre></div>` : ''}
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    ${task.subtasks && task.subtasks.length > 0 ? `
+                        <div style="margin-top: 20px;">
+                            <h4>📋 子任务 (${task.subtasks.filter(s => s.status === 'completed').length}/${task.subtasks.length})</h4>
+                            <div style="margin-top: 12px;">
+                                ${task.subtasks.map((sub, idx) => `
+                                    <div style="padding: 8px; margin: 4px 0; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 13px;">
+                                        ${idx + 1}. ${escapeHtml(sub.description || sub.name)} 
+                                        <span class="task-status status-${sub.status}">${sub.status}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+
+            showModal('任务详情', detailHtml);
         }
 
         // 更新统计
@@ -879,13 +962,16 @@
             }
 
             try {
-                const params = new URLSearchParams({ path });
-                if (name) params.append('name', name);
-                if (description) params.append('description', description);
-                if (tags.length) params.append('tags', JSON.stringify(tags));
-
-                const response = await fetch(`/api/projects?${params}`, { method: 'POST' });
+                const response = await fetch('/api/projects', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path, name, description, tags })
+                });
                 const data = await response.json();
+                if (data.error) {
+                    addLog(`添加项目失败：${data.error}`, 'error');
+                    return;
+                }
                 addLog(`项目已添加：${data.project.name}`, 'success');
                 closeAddProjectDialog();
                 loadProjects();
