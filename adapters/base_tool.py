@@ -11,6 +11,7 @@
 
 import asyncio
 import subprocess
+import json
 from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
@@ -214,8 +215,8 @@ class QwenTool(BaseTool):
             )
             
             # 构建命令
-            # qwen 直接使用位置参数
-            cmd = ["qwen", input_text]
+            # qwen 使用 --yolo 模式自动执行，不需要用户确认
+            cmd = ["qwen", "--yolo", input_text]
             
             # 添加选项
             if kwargs.get("model"):
@@ -367,8 +368,8 @@ class OpenCodeTool(BaseTool):
                 self._current_task_id
             )
             
-            # 构建命令 - opencode 使用 "run" 子命令
-            cmd = [str(self._opencode_path), "run", input_text]
+            # 构建命令 - opencode 使用 "run --format json" 获取结构化输出
+            cmd = [str(self._opencode_path), "run", "--format", "json", input_text]
             
             self.logger.debug(f"执行 OpenCode: {' '.join(cmd)}")
             
