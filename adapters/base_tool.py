@@ -233,9 +233,20 @@ class QwenTool(BaseTool):
                 stderr=asyncio.subprocess.PIPE,
                 stdin=asyncio.subprocess.PIPE,
             )
-            
-            # 读取输出
-            stdout, stderr = await self._process.communicate(timeout=kwargs.get("timeout", 300))
+
+            # 读取输出（使用 wait_for 实现超时）
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    self._process.communicate(),
+                    timeout=kwargs.get("timeout", 300)
+                )
+            except asyncio.TimeoutError:
+                if self._process:
+                    self._process.kill()
+                return ToolResult(
+                    success=False,
+                    error=f"Qwen 执行超时（{kwargs.get('timeout', 300)}秒）",
+                )
             
             duration = time.time() - start_time
             
@@ -261,14 +272,7 @@ class QwenTool(BaseTool):
                 )
             
             return result
-            
-        except asyncio.TimeoutError:
-            if self._process:
-                self._process.kill()
-            return ToolResult(
-                success=False,
-                error=f"Qwen 执行超时（{kwargs.get('timeout', 300)}秒）",
-            )
+
         except Exception as e:
             self.logger.error(f"Qwen 执行异常：{e}")
             return ToolResult(
@@ -380,9 +384,20 @@ class OpenCodeTool(BaseTool):
                 stderr=asyncio.subprocess.PIPE,
                 cwd=kwargs.get("cwd"),
             )
-            
-            # 读取输出
-            stdout, stderr = await self._process.communicate(timeout=kwargs.get("timeout", 300))
+
+            # 读取输出（使用 wait_for 实现超时）
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    self._process.communicate(),
+                    timeout=kwargs.get("timeout", 300)
+                )
+            except asyncio.TimeoutError:
+                if self._process:
+                    self._process.kill()
+                return ToolResult(
+                    success=False,
+                    error=f"OpenCode 执行超时（{kwargs.get('timeout', 300)}秒）",
+                )
 
             duration = time.time() - start_time
 
@@ -413,13 +428,6 @@ class OpenCodeTool(BaseTool):
 
             return result
 
-        except asyncio.TimeoutError:
-            if self._process:
-                self._process.kill()
-            return ToolResult(
-                success=False,
-                error=f"OpenCode 执行超时",
-            )
         except Exception as e:
             self.logger.error(f"OpenCode 执行异常：{e}")
             return ToolResult(
