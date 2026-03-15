@@ -655,6 +655,59 @@ def run_webui(host: str, port: int, websocket_port: int = 8765):
             except Exception as e:
                 print(f"任务执行异常：{e}")
 
+        @app.get("/api/workspaces")
+        async def get_workspaces():
+            """获取工作目录列表"""
+            try:
+                from pathlib import Path
+                workspaces = [
+                    {"name": "当前目录", "path": str(Path.cwd())},
+                    {"name": "用户目录", "path": str(Path.home())},
+                    {"name": "桌面", "path": str(Path.home() / "Desktop")},
+                    {"name": "文档", "path": str(Path.home() / "Documents")},
+                ]
+                return {"workspaces": workspaces}
+            except Exception as e:
+                return {"error": str(e)}
+
+        @app.get("/api/projects")
+        async def list_projects():
+            """获取项目列表"""
+            try:
+                from core.project_manager import get_project_manager
+                pm = get_project_manager()
+                projects = pm.list_projects()
+                return {"projects": [p.to_dict() for p in projects]}
+            except Exception as e:
+                return {"projects": [], "error": str(e)}
+
+        @app.post("/api/projects")
+        async def add_project(project_data: dict):
+            """添加项目"""
+            try:
+                from core.project_manager import get_project_manager
+                pm = get_project_manager()
+                path = project_data.get("path", "")
+                name = project_data.get("name")
+                description = project_data.get("description", "")
+                tags = project_data.get("tags", [])
+                project = pm.add_project(path, name, description, tags)
+                return {"project": project.to_dict()}
+            except Exception as e:
+                return {"error": str(e)}
+
+        @app.delete("/api/projects/{project_id}")
+        async def delete_project(project_id: str):
+            """删除项目"""
+            try:
+                from core.project_manager import get_project_manager
+                pm = get_project_manager()
+                if pm.remove_project(project_id):
+                    return {"message": "项目已删除"}
+                return {"error": "项目不存在"}
+            except Exception as e:
+                return {"error": str(e)}
+
         print(f"\n🌐 Web UI 已启动!")
         print(f"   访问地址：http://{host}:{port}")
         print(f"   WebSocket: ws://{host}:{websocket_port}")
