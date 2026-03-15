@@ -383,22 +383,26 @@ class OpenCodeTool(BaseTool):
             
             # 读取输出
             stdout, stderr = await self._process.communicate(timeout=kwargs.get("timeout", 300))
-            
+
             duration = time.time() - start_time
-            
+
+            # 解析 JSON 输出
+            raw_output = stdout.decode('utf-8') if stdout else ""
+            parsed_output = self._parse_opencode_json(raw_output)
+
             result = ToolResult(
                 success=self._process.returncode == 0,
-                output=stdout.decode('utf-8') if stdout else "",
+                output=parsed_output,
                 error=stderr.decode('utf-8') if stderr else "",
                 exit_code=self._process.returncode,
                 duration=duration,
-                meta={"task_id": self._current_task_id},
+                meta={"task_id": self._current_task_id, "raw_output": raw_output},
             )
-            
+
             # 发送结果消息
             if result.success:
                 self.console_io.send_tool_output(
-                    f"✅ OpenCode 任务完成",
+                    f"✅ OpenCode 任务完成：{parsed_output[:200] if parsed_output else 'ok'}",
                     self._current_task_id
                 )
             else:
@@ -406,8 +410,7 @@ class OpenCodeTool(BaseTool):
                     f"❌ OpenCode 任务失败：{result.error[:200]}",
                     self._current_task_id
                 )
-            
-            return result
+
             
         except asyncio.TimeoutError:
             if self._process:
@@ -432,12 +435,34 @@ class OpenCodeTool(BaseTool):
         base_status["tool_type"] = "opencode"
         base_status["path"] = str(self._opencode_path) if self._opencode_path else None
         return base_status
-    
+
+    def _parse_opencode_json(self, raw_output: str) -> str:
+        """解析 OpenCode JSON 输出，提取文本内容"""
+        if not raw_output:
+            return ""
+
+        texts = []
+        for line in raw_output.strip().split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+                if data.get("type") == "text" and "part" in data:
+                    part = data["part"]
+                    if "text" in part:
+                        texts.append(part["text"])
+            except json.JSONDecodeError:
+                # 如果不是 JSON，直接添加文本
+                texts.append(line)
+
+        return "\n".join(texts)
+
     async def handle_error(self, error: str) -> bool:
         """处理错误"""
         self._last_error = error
         self.status = ToolStatus.ERROR
-        
+
         # OpenCode 错误通常可重试
         return "not found" not in error.lower()
     
