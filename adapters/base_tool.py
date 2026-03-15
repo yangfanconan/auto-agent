@@ -214,7 +214,8 @@ class QwenTool(BaseTool):
             )
             
             # 构建命令
-            cmd = ["qwen", "-p", input_text]
+            # qwen 直接使用位置参数
+            cmd = ["qwen", input_text]
             
             # 添加选项
             if kwargs.get("model"):
@@ -366,8 +367,8 @@ class OpenCodeTool(BaseTool):
                 self._current_task_id
             )
             
-            # 构建命令
-            cmd = [str(self._opencode_path), "--prompt", input_text]
+            # 构建命令 - opencode 使用 "run" 子命令
+            cmd = [str(self._opencode_path), "run", input_text]
             
             self.logger.debug(f"执行 OpenCode: {' '.join(cmd)}")
             
