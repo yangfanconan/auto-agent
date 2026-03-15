@@ -262,12 +262,12 @@ class QwenTool(BaseTool):
             # 发送结果消息
             if result.success:
                 self.console_io.send_tool_output(
-                    f"✅ Qwen 任务完成：{result.output[:200]}",
+                    f"✅ Qwen 任务完成：{result.output}",
                     self._current_task_id
                 )
             else:
                 self.console_io.send_tool_output(
-                    f"❌ Qwen 任务失败：{result.error[:200]}",
+                    f"❌ Qwen 任务失败：{result.error}",
                     self._current_task_id
                 )
             
@@ -417,12 +417,12 @@ class OpenCodeTool(BaseTool):
             # 发送结果消息
             if result.success:
                 self.console_io.send_tool_output(
-                    f"✅ OpenCode 任务完成：{parsed_output[:200] if parsed_output else 'ok'}",
+                    f"✅ OpenCode 任务完成：{parsed_output if parsed_output else 'ok'}",
                     self._current_task_id
                 )
             else:
                 self.console_io.send_tool_output(
-                    f"❌ OpenCode 任务失败：{result.error[:200]}",
+                    f"❌ OpenCode 任务失败：{result.error}",
                     self._current_task_id
                 )
 
