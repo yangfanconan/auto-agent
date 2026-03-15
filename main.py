@@ -319,19 +319,44 @@ def main():
     # 打印工具状态
     print_tools_status()
 
+    # 检测是否是后台运行（无 TTY）
+    is_background = not sys.stdin.isatty()
+    
     # 启动 WebSocket 服务和控制台 IO 接管（如果配置启用）
-    enable_websocket = config.websocket.enabled and not args.no_console_redirect
-    enable_console_redirect = config.console_io.enabled and not args.no_console_redirect
+    try:
+        enable_websocket = getattr(config, 'websocket', None) and getattr(config.websocket, 'enabled', True) and not args.no_console_redirect
+    except:
+        enable_websocket = False
+    
+    try:
+        enable_console_redirect = getattr(config, 'console_io', None) and getattr(config.console_io, 'enabled', True) and not args.no_console_redirect
+    except:
+        enable_console_redirect = False
+    
+    # 后台运行时禁用交互功能
+    if is_background:
+        enable_console_redirect = False
+        logger.info("检测到后台运行，已禁用控制台 IO 接管")
     
     if args.enable_console_redirect:
         enable_console_redirect = True
+    
+    websocket_port = 8765
+    try:
+        if hasattr(config, 'websocket') and hasattr(config.websocket, 'port'):
+            websocket_port = config.websocket.port
+    except:
+        pass
+    
+    if args.websocket_port:
+        websocket_port = args.websocket_port
     
     if enable_websocket or enable_console_redirect:
         logger.info("启动增强功能...")
         start_enhanced_features(
             enable_websocket=enable_websocket,
             enable_console_redirect=enable_console_redirect,
-            websocket_port=args.websocket_port or config.websocket.port,
+            websocket_port=websocket_port,
         )
 
     # 环境检查模式
@@ -346,6 +371,21 @@ def main():
     # 命令模式
     if args.command:
         return run_command_mode(args.command, args.workspace, config)
+
+    # 后台运行时跳过交互模式
+    if is_background:
+        logger.info("后台运行模式，已跳过交互模式")
+        print("\n🔌 服务已启动，运行在后台模式")
+        print(f"   WebSocket: ws://0.0.0.0:{websocket_port}")
+        print(f"   使用命令模式：python main.py -c '任务描述'\n")
+        # 保持运行
+        import time
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
+        return 0
 
     # 交互模式（默认）
     run_interactive_mode(args.workspace, config)

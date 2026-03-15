@@ -164,13 +164,23 @@ class EventBus:
                 except Exception as e:
                     self.logger.error(f"事件处理器异常：{e}")
         
-        # 调用异步处理器
+        # 调用异步处理器（如果有运行中的事件循环）
         if event.type in self._async_subscribers:
-            for handler in self._async_subscribers[event.type]:
-                asyncio.create_task(self._call_async_handler(handler, event))
+            try:
+                loop = asyncio.get_running_loop()
+                for handler in self._async_subscribers[event.type]:
+                    asyncio.create_task(self._call_async_handler(handler, event))
+            except RuntimeError:
+                # 没有运行中的事件循环，跳过异步处理器
+                pass
         
-        # 放入队列
-        asyncio.create_task(self._queue.put(event))
+        # 放入队列（如果有运行中的事件循环）
+        try:
+            loop = asyncio.get_running_loop()
+            asyncio.create_task(self._queue.put(event))
+        except RuntimeError:
+            # 没有运行中的事件循环，跳过
+            pass
         
         self.logger.debug(f"发布事件：{event.type}")
     

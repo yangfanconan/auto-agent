@@ -44,19 +44,19 @@ class ToolRegistry:
             self.logger.info("已注册工具：opencode")
         except ImportError as e:
             self.logger.warning(f"无法导入 OpencodeAdapter: {e}")
-        
-        # 注册 qwencode
+
+        # 注册 qwen
         try:
-            from .qwencode_adapter import QwencodeAdapter
+            from .qwen_adapter import QwenAdapter
             self.register_tool(
-                name="qwencode",
-                description="批量代码生成、格式化、编码优化工具",
-                adapter_class=QwencodeAdapter,
-                config=ToolConfig(enabled=True, timeout=180, max_retries=3)
+                name="qwen",
+                description="通义千问 - 代码生成、对话工具",
+                adapter_class=QwenAdapter,
+                config=ToolConfig(enabled=True, timeout=300, max_retries=3)
             )
-            self.logger.info("已注册工具：qwencode")
+            self.logger.info("已注册工具：qwen")
         except ImportError as e:
-            self.logger.warning(f"无法导入 QwencodeAdapter: {e}")
+            self.logger.warning(f"无法导入 QwenAdapter: {e}")
     
     def register_tool(
         self,

@@ -835,8 +835,8 @@ def get_html_content() -> str:
             <div class="form-group">
                 <label>🔧 选择工具</label>
                 <select id="toolSelect">
-                    <option value="opencode">Opencode (代码生成核心)</option>
-                    <option value="qwen">Qwen (通义千问)</option>
+                    <option value="opencode">⚡ Opencode (1.2.26)</option>
+                    <option value="qwen">🤖 Qwen (0.12.3)</option>
                 </select>
             </div>
             <div class="checkbox-group">
@@ -1493,7 +1493,7 @@ def get_html_content() -> str:
 
                 const toolBadge = task.tool ? `
                     <span style="background: rgba(0,217,255,0.2); color: #00d9ff; padding: 2px 8px; border-radius: 4px; font-size: 11px; margin-left: 8px;">
-                        ${task.tool === 'qwen' || task.tool === 'qwencode' ? '🤖 Qwen' : '⚡ Opencode'}
+                        ${task.tool === 'qwen' ? '🤖 Qwen' : '⚡ Opencode'}
                     </span>
                 ` : '';
                 

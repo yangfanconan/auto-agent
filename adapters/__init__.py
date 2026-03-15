@@ -3,7 +3,7 @@
 """
 
 from .opencode_adapter import OpencodeAdapter, OpencodeResult
-from .qwencode_adapter import QwencodeAdapter, QwencodeResult
+from .qwen_adapter import QwenAdapter, QwenResult
 from .tool_registry import (
     ToolRegistry,
     ToolInfo,
@@ -16,9 +16,9 @@ __all__ = [
     # Opencode
     'OpencodeAdapter',
     'OpencodeResult',
-    # Qwencode
-    'QwencodeAdapter',
-    'QwencodeResult',
+    # Qwen
+    'QwenAdapter',
+    'QwenResult',
     # Registry
     'ToolRegistry',
     'ToolInfo',
