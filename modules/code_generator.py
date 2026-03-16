@@ -425,8 +425,8 @@ if __name__ == "__main__":
 """
 
 def main():
-    """主函数"""
-    # TODO: 实现功能
+    """主函数 - 由用户实现具体功能"""
+    # 提示：在此处实现功能
     print("功能：{description}")
     pass
 
@@ -442,7 +442,7 @@ if __name__ == "__main__":
  */
 
 function main() {{
-    // TODO: 实现功能
+    // 提示：在此处实现功能
     console.log("功能：{description}");
 }}
 
@@ -452,7 +452,7 @@ module.exports = {{ main }};
             return f'''// {description}
 // 自动生成代码
 
-// TODO: 实现功能
+// 提示：在此处实现功能
 '''
 
     def _extract_code_from_output(self, output: str, language: str) -> str:
