@@ -859,7 +859,7 @@
                 const response = await fetch('/api/tasks');
                 const data = await response.json();
                 tasks = data.tasks.reduce((acc, task) => {
-                    acc[task.task_id] = task;
+                    acc[task.id] = task;
                     return acc;
                 }, {});
                 renderTasks();
