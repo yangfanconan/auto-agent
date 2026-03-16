@@ -37,10 +37,6 @@ except ImportError:
     from core.tool_scheduler import get_scheduler
 
 
-# 全局 WebSocket 管理器引用
-_ws_manager = None
-
-
 def print_banner():
     """打印欢迎横幅"""
     print("""

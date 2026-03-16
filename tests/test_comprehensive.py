@@ -18,7 +18,6 @@ import pytest
 class TestTaskParser:
     """TaskParser 测试类"""
 
-    @patch.dict('core.task_parser._global_logger', None)
     def test_init(self):
         from core.task_parser import TaskParser
         with patch('core.task_parser.get_logger'):
