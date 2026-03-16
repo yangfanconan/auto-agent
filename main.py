@@ -159,12 +159,12 @@ def setup_api_routes(app, static_dir: Path):
     @app.get("/api/workspaces")
     async def get_workspaces():
         """获取工作目录列表"""
-        return handle_get_workspaces()
+        return await handle_get_workspaces()
     
     @app.get("/api/projects")
     async def list_projects():
         """获取项目列表"""
-        return handle_list_projects()
+        return await handle_list_projects()
     
     @app.post("/api/projects")
     async def add_project(project_data: dict):
@@ -321,18 +321,40 @@ def run_webui(host: str, port: int, websocket_port: int = 8765):
     """运行 Web UI"""
     try:
         import uvicorn
+        import asyncio
         from pathlib import Path
-        
+
         static_dir = Path(__file__).parent / "ui" / "static"
         app = create_fastapi_app(static_dir)
         setup_api_routes(app, static_dir)
-        
+
         print(f"\n🌐 Web UI 已启动!")
         print(f"   访问地址：http://{host}:{port}")
         print(f"   WebSocket: ws://{host}:{websocket_port}")
         print(f"   按 Ctrl+C 停止\n")
+
+        # 启动WebSocket服务器（在后台）
+        async def start_servers():
+            # 启动WebSocket服务器
+            try:
+                from ui.websocket_server import start_websocket_server
+                ws_task = asyncio.create_task(
+                    start_websocket_server(host=host, port=websocket_port)
+                )
+                await asyncio.sleep(1)  # 等待WebSocket启动
+            except Exception as e:
+                print(f"⚠️ WebSocket服务器启动失败: {e}")
+                ws_task = None
+            
+            # 启动HTTP服务器
+            config = uvicorn.Config(app, host=host, port=port, log_level="info")
+            server = uvicorn.Server(config)
+            await server.serve()
+            
+            if ws_task:
+                ws_task.cancel()
         
-        uvicorn.run(app, host=host, port=port, log_level="info")
+        asyncio.run(start_servers())
         return 0
     except ImportError as e:
         print(f"\n❌ 错误：缺少 Web UI 依赖 - {e}")
@@ -340,6 +362,8 @@ def run_webui(host: str, port: int, websocket_port: int = 8765):
         return 1
     except Exception as e:
         print(f"\n❌ Web UI 启动失败：{e}")
+        import traceback
+        traceback.print_exc()
         return 1
 
 
