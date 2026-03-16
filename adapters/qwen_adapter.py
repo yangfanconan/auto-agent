@@ -154,10 +154,14 @@ class QwenAdapter:
 
             except subprocess.TimeoutExpired:
                 last_error = f"执行超时（{timeout}秒）"
-                self.logger.warning(f"qwen 调用超时，重试 {attempt + 1}/{max_retries}")
+                self.logger.warning(
+                    f"qwen 调用超时，重试 {
+                        attempt + 1}/{max_retries}")
             except Exception as e:
                 last_error = str(e)
-                self.logger.warning(f"qwen 调用失败：{e}，重试 {attempt + 1}/{max_retries}")
+                self.logger.warning(
+                    f"qwen 调用失败：{e}，重试 {
+                        attempt + 1}/{max_retries}")
 
         raise ToolCallException("qwen", last_error, {"prompt": prompt[:200]})
 

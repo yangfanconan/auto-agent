@@ -109,20 +109,20 @@ class AutoAgentException(Exception):
         self.details = details or {}
         self.suggestion = suggestion
         self._error_info: Optional[FriendlyErrorInfo] = None
-    
+
     def get_friendly_info(self) -> FriendlyErrorInfo:
         """获取友好错误信息"""
         if self._error_info:
             return self._error_info
-        
+
         template = ERROR_TEMPLATES.get(
             type(self).__name__,
             ERROR_TEMPLATES["AutoAgentException"]
         )
-        
+
         # 格式化消息
         format_kwargs = {"message": self.message, **self.details}
-        
+
         return FriendlyErrorInfo(
             title=template.title,
             message=template.message.format(**format_kwargs),
@@ -131,7 +131,7 @@ class AutoAgentException(Exception):
             icon=template.icon,
             details=self.details,
         )
-    
+
     def to_dict(self) -> dict:
         """转换为字典格式"""
         return {
@@ -146,7 +146,8 @@ class AutoAgentException(Exception):
 class EnvironmentException(AutoAgentException):
     """环境异常"""
 
-    def __init__(self, message: str, details: dict = None, suggestion: Optional[str] = None):
+    def __init__(self, message: str, details: dict = None,
+                 suggestion: Optional[str] = None):
         super().__init__(message, ExceptionLevel.HIGH, details, suggestion)
 
 
@@ -213,7 +214,7 @@ class DeliveryException(AutoAgentException):
 def show_friendly_error(error: Exception, console=None):
     """
     显示友好错误信息
-    
+
     Args:
         error: 异常对象
         console: Rich Console 实例（可选）
@@ -221,7 +222,7 @@ def show_friendly_error(error: Exception, console=None):
     if console is None:
         from rich.console import Console
         console = Console()
-    
+
     if isinstance(error, AutoAgentException):
         info = error.get_friendly_info()
     else:
@@ -230,18 +231,20 @@ def show_friendly_error(error: Exception, console=None):
             message=str(error),
             suggestion="查看日志文件或联系开发者",
         )
-    
+
     # 显示错误
     from rich.panel import Panel
-    
+
     content = f"[bold]{info.message}[/bold]\n\n"
     content += f"[yellow]💡 {info.suggestion}[/yellow]"
-    
+
     border_color = {"error": "red", "warning": "yellow"}.get(info.level, "red")
-    
+
     console.print(Panel(
         content,
-        title=f"[bold {border_color}]{info.icon} {info.title}[/bold {border_color}]",
+        title=f"[bold {border_color}]{
+            info.icon} {
+            info.title}[/bold {border_color}]",
         border_style=border_color,
         padding=(1, 2),
     ))

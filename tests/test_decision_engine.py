@@ -3,6 +3,11 @@
 测试预设规则引擎和 Qwen 智能决策引擎
 """
 
+from core.decision_engine import (
+    DecisionEngine, RuleEngine, QwenDecisionEngine,
+    DecisionContext, DecisionResult, DecisionType, RiskLevel,
+    ToolStatus
+)
 import pytest
 import asyncio
 import sys
@@ -11,12 +16,6 @@ from datetime import datetime
 
 # 添加项目路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from core.decision_engine import (
-    DecisionEngine, RuleEngine, QwenDecisionEngine,
-    DecisionContext, DecisionResult, DecisionType, RiskLevel,
-    ToolStatus
-)
 
 
 class TestRuleEngine:

@@ -24,12 +24,12 @@ class ToolInfo:
 
 class ToolRegistry:
     """工具注册中心"""
-    
+
     def __init__(self):
         self.logger = get_logger()
         self._tools: Dict[str, ToolInfo] = {}
         self._register_builtin_tools()
-    
+
     def _register_builtin_tools(self):
         """注册内置工具"""
         # 注册 opencode
@@ -57,7 +57,7 @@ class ToolRegistry:
             self.logger.info("已注册工具：qwen")
         except ImportError as e:
             self.logger.warning(f"无法导入 QwenAdapter: {e}")
-    
+
     def register_tool(
         self,
         name: str,
@@ -67,7 +67,7 @@ class ToolRegistry:
     ):
         """
         注册工具
-        
+
         Args:
             name: 工具名称
             description: 工具描述
@@ -80,28 +80,28 @@ class ToolRegistry:
             adapter_class=adapter_class,
             config=config or ToolConfig()
         )
-    
+
     def get_tool(self, name: str, lazy_init: bool = True) -> Optional[Any]:
         """
         获取工具实例
-        
+
         Args:
             name: 工具名称
             lazy_init: 是否懒加载
-        
+
         Returns:
             工具实例，如果不存在则返回 None
         """
         if name not in self._tools:
             self.logger.warning(f"工具不存在：{name}")
             return None
-        
+
         tool_info = self._tools[name]
-        
+
         if not tool_info.config.enabled:
             self.logger.warning(f"工具已禁用：{name}")
             return None
-        
+
         if lazy_init and tool_info.instance is None:
             try:
                 tool_info.instance = tool_info.adapter_class(tool_info.config)
@@ -109,13 +109,13 @@ class ToolRegistry:
             except Exception as e:
                 self.logger.error(f"初始化工具 {name} 失败：{e}")
                 return None
-        
+
         return tool_info.instance
-    
+
     def get_tool_info(self, name: str) -> Optional[ToolInfo]:
         """获取工具信息"""
         return self._tools.get(name)
-    
+
     def list_tools(self) -> Dict[str, Dict]:
         """列出所有已注册工具"""
         result = {}
@@ -125,7 +125,7 @@ class ToolRegistry:
                 "enabled": info.config.enabled,
                 "available": False
             }
-            
+
             # 检查工具可用性
             if info.config.enabled:
                 try:
@@ -136,19 +136,19 @@ class ToolRegistry:
                             result[name]["version"] = adapter.version
                 except Exception:
                     pass
-        
+
         return result
-    
+
     def is_tool_available(self, name: str) -> bool:
         """检查工具是否可用"""
         tool = self.get_tool(name)
         if tool is None:
             return False
-        
+
         if hasattr(tool, 'is_available'):
             return tool.is_available
         return True
-    
+
     def get_available_tools(self) -> list:
         """获取所有可用工具名称"""
         available = []

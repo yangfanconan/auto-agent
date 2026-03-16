@@ -76,7 +76,7 @@ class WebSocketManager:
     def broadcast_from_thread(self, message: Dict):
         """
         从任意线程安全地广播消息
-        
+
         这个方法可以从任何线程调用，消息会被安全地转发到 WebSocket
         """
         try:
@@ -84,11 +84,12 @@ class WebSocketManager:
             ts_queue = self.get_thread_safe_queue()
             ts_queue.put(message)
             self.logger.debug(f"消息已放入线程安全队列: {message.get('type', 'unknown')}")
-            
+
             # 如果有事件循环，调度一个任务来处理队列
             if self._event_loop:
                 if self._event_loop.is_running():
-                    self._event_loop.call_soon_threadsafe(self._process_thread_queue)
+                    self._event_loop.call_soon_threadsafe(
+                        self._process_thread_queue)
                     self.logger.debug("已调度 _process_thread_queue")
                 else:
                     self.logger.warning("事件循环未运行")
@@ -106,17 +107,17 @@ class WebSocketManager:
                     message = ts_queue.get_nowait()
                     # 放入异步广播队列
                     self._broadcast_queue.put_nowait(message)
-                except:
+                except BaseException:
                     break
         except Exception as e:
             self.logger.error(f"处理线程队列失败：{e}")
-    
+
     async def start_server(self):
         """启动 WebSocket 服务器"""
         if websockets is None:
             self.logger.error("websockets 库未安装，请运行：pip install websockets")
             return
-        
+
         try:
             self._server = await websockets.serve(
                 self._handle_connection,
@@ -130,39 +131,39 @@ class WebSocketManager:
 
             self._running = True
             self.logger.info(f"WebSocket 服务器已启动：ws://{self.host}:{self.port}")
-            
+
             # 启动广播任务
             asyncio.create_task(self._broadcast_loop())
 
             # 启动线程队列处理任务
             asyncio.create_task(self._thread_queue_processor())
-            
+
             # 等待停止信号
             await self._stop_event.wait()
-            
+
         except Exception as e:
             self.logger.error(f"WebSocket 服务器启动失败：{e}")
             raise
-    
+
     async def stop_server(self):
         """停止 WebSocket 服务器"""
         self._running = False
         self._stop_event.set()
-        
+
         # 关闭所有连接
         for ws_id in list(self.connections.keys()):
             await self._close_connection(ws_id)
-        
+
         if self._server:
             self._server.close()
             await self._server.wait_closed()
-        
+
         self.logger.info("WebSocket 服务器已停止")
-    
+
     async def _handle_connection(self, websocket: WebSocketServerProtocol):
         """处理 WebSocket 连接"""
         ws_id = f"ws_{id(websocket)}_{datetime.now().strftime('%H%M%S')}"
-        
+
         # 注册连接
         self.connections[ws_id] = websocket
         self.connection_info[ws_id] = {
@@ -170,9 +171,9 @@ class WebSocketManager:
             "last_activity": datetime.now().isoformat(),
             "type": "browser",
         }
-        
+
         self.logger.info(f"WebSocket 连接已建立：{ws_id}")
-        
+
         # 发送欢迎消息
         await self._send_to_connection(
             ws_id,
@@ -182,28 +183,29 @@ class WebSocketManager:
                 "data": {"ws_id": ws_id, "timestamp": datetime.now().timestamp()},
             }
         )
-        
+
         try:
             # 接收消息循环
             async for message in websocket:
-                self.connection_info[ws_id]["last_activity"] = datetime.now().isoformat()
+                self.connection_info[ws_id]["last_activity"] = datetime.now(
+                ).isoformat()
                 await self._handle_message(ws_id, message)
-        
+
         except websockets.exceptions.ConnectionClosed:
             self.logger.info(f"WebSocket 连接已关闭：{ws_id}")
         except Exception as e:
             self.logger.error(f"WebSocket 连接异常：{ws_id} - {e}")
         finally:
             await self._close_connection(ws_id)
-    
+
     async def _handle_message(self, ws_id: str, message: str):
         """处理 WebSocket 消息"""
         try:
             data = json.loads(message)
             msg_type = data.get("type", "unknown")
-            
+
             self.logger.debug(f"收到 WebSocket 消息 [{ws_id}]: {msg_type}")
-            
+
             # 处理心跳
             if msg_type == 'ping':
                 await self._send_to_connection(ws_id, {"type": "pong"})
@@ -217,7 +219,7 @@ class WebSocketManager:
                         await self._send_to_connection(ws_id, result)
                 except Exception as e:
                     self.logger.error(f"消息回调失败：{e}")
-            
+
             # 发布事件
             publish_event(
                 event_type="websocket.message",
@@ -228,50 +230,50 @@ class WebSocketManager:
                 },
                 source="websocket"
             )
-            
+
         except json.JSONDecodeError:
             self.logger.warning(f"无效的 JSON 消息：{message[:100]}")
         except Exception as e:
             self.logger.error(f"消息处理失败：{e}")
-    
+
     async def _close_connection(self, ws_id: str):
         """关闭连接"""
         if ws_id in self.connections:
             try:
                 await self.connections[ws_id].close()
-            except:
+            except BaseException:
                 pass
             del self.connections[ws_id]
-        
+
         if ws_id in self.connection_info:
             del self.connection_info[ws_id]
-    
+
     async def send_message(self, message: Dict):
         """广播消息到所有连接"""
         await self._broadcast_queue.put(message)
-    
+
     async def send_to_connection(self, ws_id: str, message: Dict):
         """发送消息到指定连接"""
         await self._send_to_connection(ws_id, message)
-    
+
     async def _send_to_connection(self, ws_id: str, message: Dict):
         """内部方法：发送消息到指定连接"""
         if ws_id not in self.connections:
             return
-        
+
         try:
             websocket = self.connections[ws_id]
             await websocket.send(json.dumps(message, ensure_ascii=False))
         except Exception as e:
             self.logger.warning(f"发送消息失败 [{ws_id}]: {e}")
             await self._close_connection(ws_id)
-    
+
     async def _broadcast_loop(self):
         """广播循环"""
         while self._running:
             try:
                 message = await asyncio.wait_for(self._broadcast_queue.get(), timeout=1.0)
-                
+
                 # 广播到所有连接
                 tasks = [
                     self._send_to_connection(ws_id, message)
@@ -279,16 +281,15 @@ class WebSocketManager:
                 ]
                 if tasks:
                     await asyncio.gather(*tasks, return_exceptions=True)
-                
+
             except asyncio.TimeoutError:
                 continue
             except Exception as e:
                 self.logger.error(f"广播失败：{e}")
-    
+
     def get_connection_count(self) -> int:
         """获取连接数"""
         return len(self.connections)
-    
 
     async def _thread_queue_processor(self):
         """定期处理线程安全队列中的消息"""
@@ -300,6 +301,7 @@ class WebSocketManager:
                 break
             except Exception as e:
                 self.logger.error(f"线程队列处理异常：{e}")
+
     def get_connection_info(self) -> Dict:
         """获取连接信息"""
         return {
@@ -387,8 +389,9 @@ class WebSocketIOBridge:
             "event": event.type,
             "data": event.payload,
         })
-    
-    async def handle_websocket_message(self, ws_id: str, data: Dict) -> Optional[Dict]:
+
+    async def handle_websocket_message(
+            self, ws_id: str, data: Dict) -> Optional[Dict]:
         """处理 WebSocket 消息（回调）"""
         msg_type = data.get("type")
 
@@ -419,7 +422,9 @@ class WebSocketIOBridge:
 
                     # 启动任务执行
                     import asyncio
-                    asyncio.create_task(self._execute_and_report(scheduler, task_id))
+                    asyncio.create_task(
+                        self._execute_and_report(
+                            scheduler, task_id))
 
                     return {
                         "type": "ack",
@@ -454,7 +459,10 @@ class WebSocketIOBridge:
 
             publish_event(
                 event_type="user.action_confirm",
-                payload={"ws_id": ws_id, "action_id": action_id, "confirmed": confirmed},
+                payload={
+                    "ws_id": ws_id,
+                    "action_id": action_id,
+                    "confirmed": confirmed},
                 source="websocket"
             )
 
@@ -470,7 +478,8 @@ class WebSocketIOBridge:
             import asyncio
             for _ in range(3000):  # 最多等待 5 分钟
                 task = scheduler.get_task(task_id)
-                if task and task.status.value in ["completed", "failed", "cancelled"]:
+                if task and task.status.value in [
+                        "completed", "failed", "cancelled"]:
                     # 广播任务结果
                     self._broadcast({
                         "type": "task",

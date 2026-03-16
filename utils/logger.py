@@ -62,7 +62,7 @@ class StructuredLogger:
             "extra": extra or {}
         }
         self.json_logs.append(log_entry)
-        
+
         # 延迟导入，避免循环依赖
         try:
             from core.events import publish_event
@@ -96,16 +96,21 @@ class StructuredLogger:
 
     def task_start(self, task_id: str, task_name: str):
         """记录任务开始"""
-        self.info(f"任务开始：{task_name}", {"task_id": task_id, "task_name": task_name})
+        self.info(
+            f"任务开始：{task_name}", {
+                "task_id": task_id, "task_name": task_name})
 
-    def task_end(self, task_id: str, task_name: str, status: str, duration: float):
+    def task_end(self, task_id: str, task_name: str,
+                 status: str, duration: float):
         """记录任务结束"""
         self.info(
             f"任务结束：{task_name}",
-            {"task_id": task_id, "task_name": task_name, "status": status, "duration": duration}
+            {"task_id": task_id, "task_name": task_name,
+                "status": status, "duration": duration}
         )
 
-    def tool_call(self, tool_name: str, params: dict, result: str, success: bool):
+    def tool_call(self, tool_name: str, params: dict,
+                  result: str, success: bool):
         """记录工具调用"""
         level = "INFO" if success else "ERROR"
         self._log_json(level, f"工具调用：{tool_name}", {
@@ -127,7 +132,7 @@ class StructuredLogger:
     def get_json_log_path(self) -> str:
         """获取 JSON 日志文件路径"""
         return str(self.json_log_file)
-    
+
     def get_recent_logs(self, limit: int = 100) -> list:
         """获取最近的日志"""
         return self.json_logs[-limit:]
@@ -137,7 +142,8 @@ class StructuredLogger:
 _global_logger: Optional[StructuredLogger] = None
 
 
-def get_logger(name: str = "auto-agent", log_dir: str = "logs") -> StructuredLogger:
+def get_logger(name: str = "auto-agent",
+               log_dir: str = "logs") -> StructuredLogger:
     """获取全局日志实例"""
     global _global_logger
     if _global_logger is None:

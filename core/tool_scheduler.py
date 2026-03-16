@@ -22,7 +22,7 @@ from collections import defaultdict
 try:
     from ..utils import get_logger, load_config
     from ..adapters.base_tool import (
-        ToolStatus, ToolResult, BaseTool, 
+        ToolStatus, ToolResult, BaseTool,
         QwenTool, OpenCodeTool, get_tool_registry
     )
     from ..core.console_io import get_console_redirector
@@ -58,7 +58,7 @@ class TaskStatus(str, Enum):
     COMPLETED = "completed"       # 已完成
     FAILED = "failed"             # 失败
     CANCELLED = "cancelled"       # 已取消
-    WAITING_USER = "waiting_user" # 等待用户确认
+    WAITING_USER = "waiting_user"  # 等待用户确认
 
 
 @dataclass
@@ -71,7 +71,8 @@ class Task:
     input_text: str
     priority: TaskPriority = TaskPriority.NORMAL
     status: TaskStatus = TaskStatus.PENDING
-    created_at: float = field(default_factory=lambda: datetime.now().timestamp())
+    created_at: float = field(
+        default_factory=lambda: datetime.now().timestamp())
     started_at: Optional[float] = None
     completed_at: Optional[float] = None
     result: Optional[ToolResult] = None
@@ -107,7 +108,8 @@ class TaskPlan:
     description: str
     tasks: List[Task] = field(default_factory=list)
     status: TaskStatus = TaskStatus.PENDING
-    created_at: float = field(default_factory=lambda: datetime.now().timestamp())
+    created_at: float = field(
+        default_factory=lambda: datetime.now().timestamp())
     completed_at: Optional[float] = None
     meta: Dict[str, Any] = field(default_factory=dict)
 
@@ -116,7 +118,8 @@ class TaskPlan:
         """计算进度百分比"""
         if not self.tasks:
             return 0.0
-        completed = sum(1 for t in self.tasks if t.status == TaskStatus.COMPLETED)
+        completed = sum(1 for t in self.tasks if t.status ==
+                        TaskStatus.COMPLETED)
         return (completed / len(self.tasks)) * 100
 
     def to_dict(self) -> Dict:
@@ -212,8 +215,10 @@ class ToolScheduler:
                         status = tool.status
                         if status != self._tool_status.get(tool_name):
                             self._tool_status[tool_name] = status
-                            self.logger.debug(f"工具状态更新：{tool_name} = {status.value}")
-                            
+                            self.logger.debug(
+                                f"工具状态更新：{tool_name} = {
+                                    status.value}")
+
                             # 发布事件
                             publish_event(
                                 event_type="tool.status_changed",
@@ -318,12 +323,15 @@ class ToolScheduler:
         tasks = []
         for i, st in enumerate(subtasks):
             task = Task(
-                id=f"{plan_id}_step{i+1}",
-                name=st.get("name", f"Step {i+1}"),
+                id=f"{plan_id}_step{i + 1}",
+                name=st.get("name", f"Step {i + 1}"),
                 description=st.get("description", ""),
                 tool_name=st.get("tool", "opencode"),
                 input_text=st.get("input", ""),
-                priority=TaskPriority(st.get("priority", TaskPriority.NORMAL.value)),
+                priority=TaskPriority(
+                    st.get(
+                        "priority",
+                        TaskPriority.NORMAL.value)),
                 meta={"plan_id": plan_id, "step": i + 1},
             )
             tasks.append(task)
@@ -450,7 +458,8 @@ class ToolScheduler:
 
             else:
                 # 任务失败，请求决策
-                error_msg = result.error or f"工具执行失败 (exit_code: {result.exit_code})"
+                error_msg = result.error or f"工具执行失败 (exit_code: {
+                    result.exit_code})"
                 self.logger.warning(f"任务失败：{task.id}, 错误：{error_msg}")
                 await self._handle_task_failure(task, error_msg)
 
@@ -481,7 +490,8 @@ class ToolScheduler:
         # 请求决策
         decision = await self.decision_engine.make_decision(context)
 
-        self.logger.info(f"决策结果：{decision.decision_type.value} - {decision.reason}")
+        self.logger.info(
+            f"决策结果：{decision.decision_type.value} - {decision.reason}")
 
         # 执行决策
         if decision.decision_type == DecisionType.AUTO_RETRY:
@@ -489,7 +499,8 @@ class ToolScheduler:
                 task.retry_count += 1
                 task.status = TaskStatus.PENDING
                 await self._task_queue.put((-task.priority.value, task.id))
-                self.logger.info(f"任务已重试：{task.id} ({task.retry_count}/{task.max_retries})")
+                self.logger.info(
+                    f"任务已重试：{task.id} ({task.retry_count}/{task.max_retries})")
             else:
                 task.status = TaskStatus.FAILED
                 task.error = error
@@ -584,15 +595,20 @@ class ToolScheduler:
 
     def get_tool_status(self) -> Dict[str, str]:
         """获取所有工具状态"""
-        return {name: status.value for name, status in self._tool_status.items()}
+        return {name: status.value for name,
+                status in self._tool_status.items()}
 
     def get_stats(self) -> Dict[str, Any]:
         """获取统计信息"""
         total_tasks = len(self._tasks)
-        completed = sum(1 for t in self._tasks.values() if t.status == TaskStatus.COMPLETED)
-        failed = sum(1 for t in self._tasks.values() if t.status == TaskStatus.FAILED)
-        pending = sum(1 for t in self._tasks.values() if t.status == TaskStatus.PENDING)
-        waiting = sum(1 for t in self._tasks.values() if t.status == TaskStatus.WAITING_USER)
+        completed = sum(1 for t in self._tasks.values()
+                        if t.status == TaskStatus.COMPLETED)
+        failed = sum(1 for t in self._tasks.values()
+                     if t.status == TaskStatus.FAILED)
+        pending = sum(1 for t in self._tasks.values()
+                      if t.status == TaskStatus.PENDING)
+        waiting = sum(1 for t in self._tasks.values()
+                      if t.status == TaskStatus.WAITING_USER)
 
         return {
             "total_tasks": total_tasks,

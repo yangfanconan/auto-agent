@@ -48,7 +48,7 @@ class ToolResult:
     exit_code: int = 0
     duration: float = 0.0
     meta: Dict[str, Any] = field(default_factory=dict)
-    
+
     def to_dict(self) -> Dict:
         return {
             "success": self.success,
@@ -62,39 +62,39 @@ class ToolResult:
 
 class BaseTool(ABC):
     """工具抽象基类"""
-    
+
     def __init__(self, name: str, config: Optional[ToolConfig] = None):
         self.name = name
         self.config = config or ToolConfig()
         self.logger = get_logger()
         self.console_io = get_console_redirector()
-        
+
         # 状态
         self._status = ToolStatus.IDLE
         self._last_error: Optional[str] = None
         self._current_task_id: Optional[str] = None
         self._retry_count = 0
-        
+
         # 回调
         self._on_status_change: Optional[Callable[[ToolStatus], None]] = None
-        
+
         self.logger.info(f"工具已初始化：{name}")
-    
+
     @property
     def status(self) -> ToolStatus:
         """获取工具状态"""
         return self._status
-    
+
     @status.setter
     def status(self, value: ToolStatus):
         """设置工具状态"""
         old_status = self._status
         self._status = value
-        
+
         # 状态变化回调
         if self._on_status_change:
             self._on_status_change(value)
-        
+
         # 发布事件
         if old_status != value:
             publish_event(
@@ -106,27 +106,27 @@ class BaseTool(ABC):
                 },
                 source="tool"
             )
-            
+
             # 发送控制台消息
             self.console_io.send_status(
                 f"工具 {self.name} 状态变更：{old_status.value} → {value.value}",
                 {"tool_name": self.name, "old": old_status.value, "new": value.value}
             )
-    
+
     @abstractmethod
     async def run(self, input_text: str, **kwargs) -> ToolResult:
         """
         运行工具（异步）
-        
+
         Args:
             input_text: 输入文本/指令
             **kwargs: 额外参数
-        
+
         Returns:
             ToolResult: 执行结果
         """
         pass
-    
+
     @abstractmethod
     def get_status(self) -> Dict[str, Any]:
         """获取详细状态"""
@@ -136,56 +136,59 @@ class BaseTool(ABC):
             "last_error": self._last_error,
             "current_task": self._current_task_id,
         }
-    
+
     @abstractmethod
     async def handle_error(self, error: str) -> bool:
         """
         处理错误
-        
+
         Args:
             error: 错误信息
-        
+
         Returns:
             bool: 是否已处理（True 表示可重试）
         """
         pass
-    
-    def set_status_change_callback(self, callback: Callable[[ToolStatus], None]):
+
+    def set_status_change_callback(
+            self, callback: Callable[[ToolStatus], None]):
         """设置状态变化回调"""
         self._on_status_change = callback
-    
-    async def run_with_retry(self, input_text: str, max_retries: int = 3, **kwargs) -> ToolResult:
+
+    async def run_with_retry(self, input_text: str,
+                             max_retries: int = 3, **kwargs) -> ToolResult:
         """带重试的执行"""
         self._retry_count = 0
-        
+
         while self._retry_count <= max_retries:
-            self.logger.info(f"执行工具 {self.name} (尝试 {self._retry_count + 1}/{max_retries + 1})")
-            
+            self.logger.info(
+                f"执行工具 {self.name} (尝试 {self._retry_count + 1}/{max_retries + 1})")
+
             result = await self.run(input_text, **kwargs)
-            
+
             if result.success:
                 return result
-            
+
             # 处理错误
             handled = await self.handle_error(result.error)
-            
+
             if not handled:
                 self.logger.error(f"工具 {self.name} 执行失败，无法恢复：{result.error}")
                 return result
-            
+
             self._retry_count += 1
             self.logger.warning(f"工具 {self.name} 重试中...")
-            
+
             # 等待一段时间后重试
             if self._retry_count <= max_retries:
                 await asyncio.sleep(1.0 * self._retry_count)
-        
+
         # 所有重试失败
         return ToolResult(
             success=False,
             error=f"工具 {self.name} 执行失败，已重试 {max_retries} 次",
         )
-    
+
     def stop(self):
         """停止工具"""
         self.status = ToolStatus.STOPPED
@@ -194,38 +197,38 @@ class BaseTool(ABC):
 
 class QwenTool(BaseTool):
     """Qwen 工具适配器"""
-    
+
     def __init__(self, config: Optional[ToolConfig] = None):
         super().__init__("qwen", config)
         self._process: Optional[asyncio.subprocess.Process] = None
-    
+
     async def run(self, input_text: str, **kwargs) -> ToolResult:
         """运行 Qwen"""
         import time
         start_time = time.time()
-        
+
         try:
             self.status = ToolStatus.RUNNING
             self._current_task_id = str(uuid.uuid4())[:8]
-            
+
             # 发送开始消息
             self.console_io.send_tool_output(
                 f"🤖 Qwen 开始执行任务：{input_text[:100]}...",
                 self._current_task_id
             )
-            
+
             # 构建命令
             # qwen 使用 --yolo 模式自动执行，不需要用户确认
             cmd = ["qwen", "--yolo", input_text]
-            
+
             # 添加选项
             if kwargs.get("model"):
                 cmd.extend(["-m", kwargs["model"]])
             if kwargs.get("sandbox"):
                 cmd.append("--sandbox")
-            
+
             self.logger.debug(f"执行 Qwen: {' '.join(cmd)}")
-            
+
             # 异步执行
             self._process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -247,9 +250,9 @@ class QwenTool(BaseTool):
                     success=False,
                     error=f"Qwen 执行超时（{kwargs.get('timeout', 300)}秒）",
                 )
-            
+
             duration = time.time() - start_time
-            
+
             result = ToolResult(
                 success=self._process.returncode == 0,
                 output=stdout.decode('utf-8') if stdout else "",
@@ -258,7 +261,7 @@ class QwenTool(BaseTool):
                 duration=duration,
                 meta={"task_id": self._current_task_id},
             )
-            
+
             # 发送结果消息
             if result.success:
                 self.console_io.send_tool_output(
@@ -270,7 +273,7 @@ class QwenTool(BaseTool):
                     f"❌ Qwen 任务失败：{result.error}",
                     self._current_task_id
                 )
-            
+
             return result
 
         except Exception as e:
@@ -282,18 +285,18 @@ class QwenTool(BaseTool):
         finally:
             self.status = ToolStatus.IDLE
             self._current_task_id = None
-    
+
     def get_status(self) -> Dict[str, Any]:
         """获取详细状态"""
         base_status = super().get_status()
         base_status["tool_type"] = "qwen"
         base_status["path"] = str(self._process.pid) if self._process else None
         return base_status
-    
+
     async def handle_error(self, error: str) -> bool:
         """处理错误"""
         self._last_error = error
-        
+
         # 检查是否可恢复
         if "timeout" in error.lower():
             self.logger.warning("Qwen 超时，可重试")
@@ -306,7 +309,7 @@ class QwenTool(BaseTool):
         # 其他错误不可恢复，设置 ERROR 状态
         self.status = ToolStatus.ERROR
         return False
-    
+
     def stop(self):
         """停止 Qwen"""
         if self._process:
@@ -316,13 +319,13 @@ class QwenTool(BaseTool):
 
 class OpenCodeTool(BaseTool):
     """OpenCode 工具适配器"""
-    
+
     def __init__(self, config: Optional[ToolConfig] = None):
         super().__init__("opencode", config)
         self._process: Optional[asyncio.subprocess.Process] = None
         self._opencode_path: Optional[Path] = None
         self._detect_path()
-    
+
     def _detect_path(self):
         """检测 OpenCode 路径"""
         common_paths = [
@@ -330,13 +333,13 @@ class OpenCodeTool(BaseTool):
             Path("/usr/local/bin/opencode"),
             Path("/opt/homebrew/bin/opencode"),
         ]
-        
+
         for path in common_paths:
             if path.exists():
                 self._opencode_path = path
                 self.logger.info(f"检测到 OpenCode: {self._opencode_path}")
                 return
-        
+
         # 尝试从 PATH 查找
         try:
             result = subprocess.run(
@@ -348,35 +351,36 @@ class OpenCodeTool(BaseTool):
             if result.returncode == 0 and result.stdout.strip():
                 self._opencode_path = Path(result.stdout.strip())
                 self.logger.info(f"从 PATH 找到 OpenCode: {self._opencode_path}")
-        except:
+        except BaseException:
             pass
-    
+
     async def run(self, input_text: str, **kwargs) -> ToolResult:
         """运行 OpenCode"""
         import time
         start_time = time.time()
-        
+
         if not self._opencode_path:
             return ToolResult(
                 success=False,
                 error="OpenCode 未找到，请检查安装",
             )
-        
+
         try:
             self.status = ToolStatus.RUNNING
             self._current_task_id = str(uuid.uuid4())[:8]
-            
+
             # 发送开始消息
             self.console_io.send_tool_output(
                 f"⚡ OpenCode 开始执行任务：{input_text[:100]}...",
                 self._current_task_id
             )
-            
+
             # 构建命令 - opencode 使用 "run --format json" 获取结构化输出
-            cmd = [str(self._opencode_path), "run", "--format", "json", input_text]
-            
+            cmd = [str(self._opencode_path), "run",
+                   "--format", "json", input_text]
+
             self.logger.debug(f"执行 OpenCode: {' '.join(cmd)}")
-            
+
             # 异步执行
             self._process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -411,13 +415,16 @@ class OpenCodeTool(BaseTool):
                 error=stderr.decode('utf-8') if stderr else "",
                 exit_code=self._process.returncode,
                 duration=duration,
-                meta={"task_id": self._current_task_id, "raw_output": raw_output},
+                meta={
+                    "task_id": self._current_task_id,
+                    "raw_output": raw_output},
             )
 
             # 发送结果消息
             if result.success:
                 self.console_io.send_tool_output(
-                    f"✅ OpenCode 任务完成：{parsed_output if parsed_output else 'ok'}",
+                    f"✅ OpenCode 任务完成：{
+                        parsed_output if parsed_output else 'ok'}",
                     self._current_task_id
                 )
             else:
@@ -437,12 +444,13 @@ class OpenCodeTool(BaseTool):
         finally:
             self.status = ToolStatus.IDLE
             self._current_task_id = None
-    
+
     def get_status(self) -> Dict[str, Any]:
         """获取详细状态"""
         base_status = super().get_status()
         base_status["tool_type"] = "opencode"
-        base_status["path"] = str(self._opencode_path) if self._opencode_path else None
+        base_status["path"] = str(
+            self._opencode_path) if self._opencode_path else None
         return base_status
 
     def _parse_opencode_json(self, raw_output: str) -> str:
@@ -476,7 +484,7 @@ class OpenCodeTool(BaseTool):
             return False
         # 其他错误可重试，不设置 ERROR 状态
         return True
-    
+
     def stop(self):
         """停止 OpenCode"""
         if self._process:
@@ -487,25 +495,26 @@ class OpenCodeTool(BaseTool):
 # 工具注册表
 class ToolRegistry:
     """工具注册表"""
-    
+
     def __init__(self):
         self.logger = get_logger()
         self._tools: Dict[str, BaseTool] = {}
-    
+
     def register(self, tool: BaseTool):
         """注册工具"""
         self._tools[tool.name] = tool
         self.logger.info(f"工具已注册：{tool.name}")
-    
+
     def get(self, name: str) -> Optional[BaseTool]:
         """获取工具"""
         return self._tools.get(name)
-    
+
     def list_tools(self) -> List[Dict]:
         """列出所有工具"""
         return [tool.get_status() for tool in self._tools.values()]
-    
-    async def run_tool(self, name: str, input_text: str, **kwargs) -> ToolResult:
+
+    async def run_tool(self, name: str, input_text: str,
+                       **kwargs) -> ToolResult:
         """运行指定工具"""
         tool = self.get(name)
         if not tool:
@@ -525,9 +534,9 @@ def get_tool_registry() -> ToolRegistry:
     global _global_registry
     if _global_registry is None:
         _global_registry = ToolRegistry()
-        
+
         # 注册默认工具
         _global_registry.register(QwenTool())
         _global_registry.register(OpenCodeTool())
-    
+
     return _global_registry

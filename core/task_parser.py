@@ -139,40 +139,73 @@ TASK_TEMPLATES = {
     "web_app": {
         "name": "Web 应用开发",
         "subtasks": [
-            {"name": "项目初始化", "type": TaskType.PROJECT_INIT, "priority": TaskPriority.HIGH},
-            {"name": "环境配置", "type": TaskType.ENVIRONMENT_SETUP, "priority": TaskPriority.HIGH},
-            {"name": "后端 API 开发", "type": TaskType.CODE_GENERATION, "priority": TaskPriority.HIGH},
-            {"name": "前端页面开发", "type": TaskType.CODE_GENERATION, "priority": TaskPriority.HIGH},
-            {"name": "集成测试", "type": TaskType.TESTING, "priority": TaskPriority.HIGH},
-            {"name": "文档编写", "type": TaskType.DOCUMENTATION, "priority": TaskPriority.MEDIUM},
+            {"name": "项目初始化",
+             "type": TaskType.PROJECT_INIT,
+             "priority": TaskPriority.HIGH},
+            {"name": "环境配置",
+             "type": TaskType.ENVIRONMENT_SETUP,
+             "priority": TaskPriority.HIGH},
+            {"name": "后端 API 开发",
+             "type": TaskType.CODE_GENERATION,
+             "priority": TaskPriority.HIGH},
+            {"name": "前端页面开发",
+             "type": TaskType.CODE_GENERATION,
+             "priority": TaskPriority.HIGH},
+            {"name": "集成测试", "type": TaskType.TESTING,
+                "priority": TaskPriority.HIGH},
+            {"name": "文档编写",
+             "type": TaskType.DOCUMENTATION,
+             "priority": TaskPriority.MEDIUM},
         ],
     },
     "cli_tool": {
         "name": "命令行工具",
         "subtasks": [
-            {"name": "项目初始化", "type": TaskType.PROJECT_INIT, "priority": TaskPriority.HIGH},
-            {"name": "命令行参数解析", "type": TaskType.CODE_GENERATION, "priority": TaskPriority.HIGH},
-            {"name": "核心功能实现", "type": TaskType.CODE_GENERATION, "priority": TaskPriority.HIGH},
-            {"name": "单元测试", "type": TaskType.TESTING, "priority": TaskPriority.HIGH},
-            {"name": "使用文档", "type": TaskType.DOCUMENTATION, "priority": TaskPriority.MEDIUM},
+            {"name": "项目初始化",
+             "type": TaskType.PROJECT_INIT,
+             "priority": TaskPriority.HIGH},
+            {"name": "命令行参数解析",
+             "type": TaskType.CODE_GENERATION,
+             "priority": TaskPriority.HIGH},
+            {"name": "核心功能实现",
+             "type": TaskType.CODE_GENERATION,
+             "priority": TaskPriority.HIGH},
+            {"name": "单元测试", "type": TaskType.TESTING,
+                "priority": TaskPriority.HIGH},
+            {"name": "使用文档",
+             "type": TaskType.DOCUMENTATION,
+             "priority": TaskPriority.MEDIUM},
         ],
     },
     "python_lib": {
         "name": "Python 库开发",
         "subtasks": [
-            {"name": "项目初始化", "type": TaskType.PROJECT_INIT, "priority": TaskPriority.HIGH},
-            {"name": "核心模块开发", "type": TaskType.CODE_GENERATION, "priority": TaskPriority.HIGH},
-            {"name": "单元测试", "type": TaskType.TESTING, "priority": TaskPriority.HIGH},
-            {"name": "API 文档", "type": TaskType.DOCUMENTATION, "priority": TaskPriority.MEDIUM},
-            {"name": "发布配置", "type": TaskType.DELIVERY, "priority": TaskPriority.MEDIUM},
+            {"name": "项目初始化",
+             "type": TaskType.PROJECT_INIT,
+             "priority": TaskPriority.HIGH},
+            {"name": "核心模块开发",
+             "type": TaskType.CODE_GENERATION,
+             "priority": TaskPriority.HIGH},
+            {"name": "单元测试", "type": TaskType.TESTING,
+                "priority": TaskPriority.HIGH},
+            {"name": "API 文档",
+             "type": TaskType.DOCUMENTATION,
+             "priority": TaskPriority.MEDIUM},
+            {"name": "发布配置", "type": TaskType.DELIVERY,
+                "priority": TaskPriority.MEDIUM},
         ],
     },
     "code_refactor": {
         "name": "代码重构",
         "subtasks": [
-            {"name": "代码分析", "type": TaskType.CODE_REVIEW, "priority": TaskPriority.HIGH},
-            {"name": "重构优化", "type": TaskType.OPTIMIZATION, "priority": TaskPriority.HIGH},
-            {"name": "测试验证", "type": TaskType.TESTING, "priority": TaskPriority.HIGH},
+            {"name": "代码分析",
+             "type": TaskType.CODE_REVIEW,
+             "priority": TaskPriority.HIGH},
+            {"name": "重构优化",
+             "type": TaskType.OPTIMIZATION,
+             "priority": TaskPriority.HIGH},
+            {"name": "测试验证", "type": TaskType.TESTING,
+                "priority": TaskPriority.HIGH},
         ],
     },
 }
@@ -322,7 +355,8 @@ class TaskParser:
             template_name = template["name"]
         else:
             # 标准方式生成子任务
-            subtasks = self._generate_subtasks(request, task_types, project_type)
+            subtasks = self._generate_subtasks(
+                request, task_types, project_type)
             template_name = None
 
         # 创建任务计划
@@ -346,11 +380,11 @@ class TaskParser:
     def _extract_title_description(self, request: str) -> tuple:
         """提取标题和描述（增强版）"""
         lines = request.strip().split('\n')
-        
+
         # 尝试从第一行提取标题
         first_line = lines[0].strip() if lines else "未命名任务"
         title = first_line[:80] if len(first_line) > 80 else first_line
-        
+
         # 完整描述
         description = request.strip()
 
@@ -362,7 +396,8 @@ class TaskParser:
         identified_types = []
 
         # 首先检查是否是文档/总结类任务
-        if any(word in request_lower for word in ["总结", "分析", "报告", "文档", "说明", "describe", "summary", "analyze"]):
+        if any(word in request_lower for word in [
+               "总结", "分析", "报告", "文档", "说明", "describe", "summary", "analyze"]):
             identified_types.append(TaskType.DOCUMENTATION)
 
         for task_type, keywords in self.TASK_TYPE_KEYWORDS.items():
@@ -375,7 +410,8 @@ class TaskParser:
         # 如果没有识别到类型，根据常见模式推断
         if not identified_types:
             # 检查是否是项目初始化
-            if any(word in request_lower for word in ["创建", "新建", "init", "new"]):
+            if any(word in request_lower for word in [
+                   "创建", "新建", "init", "new"]):
                 identified_types.append(TaskType.PROJECT_INIT)
             else:
                 identified_types.append(TaskType.CODE_GENERATION)
@@ -385,23 +421,24 @@ class TaskParser:
     def _identify_project_type(self, request: str) -> Optional[str]:
         """识别项目类型"""
         request_lower = request.lower()
-        
+
         for project_type, keywords in self.PROJECT_TYPE_KEYWORDS.items():
             for keyword in keywords:
                 if keyword in request_lower:
                     return project_type
-        
+
         return None
 
-    def _match_task_template(self, request: str, task_types: List[TaskType]) -> Optional[Dict]:
+    def _match_task_template(self, request: str,
+                             task_types: List[TaskType]) -> Optional[Dict]:
         """匹配任务模板"""
         request_lower = request.lower()
-        
+
         # 检查是否明确指定模板
         for template_key, template in TASK_TEMPLATES.items():
             if template_key in request_lower or template["name"] in request:
                 return template
-        
+
         # 根据任务类型推断模板
         if TaskType.PROJECT_INIT in task_types:
             if any(word in request_lower for word in ["web", "网站", "应用"]):
@@ -410,23 +447,24 @@ class TaskParser:
                 return TASK_TEMPLATES.get("cli_tool")
             elif any(word in request_lower for word in ["python", "包", "library", "库"]):
                 return TASK_TEMPLATES.get("python_lib")
-        
+
         if TaskType.CODE_REVIEW in task_types or TaskType.OPTIMIZATION in task_types:
             return TASK_TEMPLATES.get("code_refactor")
-        
+
         return None
 
     def _has_explicit_template(self, request: str) -> bool:
         """检查用户是否明确要求不使用模板"""
         return any(word in request.lower() for word in ["简单", "快速", "只要", "仅"])
 
-    def _generate_subtasks_from_template(self, template: Dict, request: str) -> List[SubTask]:
+    def _generate_subtasks_from_template(
+            self, template: Dict, request: str) -> List[SubTask]:
         """从模板生成子任务"""
         subtasks = []
-        
+
         for i, task_info in enumerate(template["subtasks"]):
             subtask = SubTask(
-                id=f"task_{i+1:03d}",
+                id=f"task_{i + 1:03d}",
                 name=task_info["name"],
                 description=f"执行{task_info['name']}",
                 task_type=task_info["type"],
@@ -434,13 +472,13 @@ class TaskParser:
                 dependencies=[],  # 模板中可定义依赖
                 estimated_duration=self._estimate_duration(task_info["type"])
             )
-            
+
             # 设置依赖关系
             if i > 0:
-                subtask.dependencies = [f"task_{j+1:03d}" for j in range(i)]
-            
+                subtask.dependencies = [f"task_{j + 1:03d}" for j in range(i)]
+
             subtasks.append(subtask)
-        
+
         return subtasks
 
     def _estimate_duration(self, task_type: TaskType) -> int:
@@ -458,7 +496,8 @@ class TaskParser:
         }
         return durations.get(task_type, 120)
 
-    def _generate_subtasks(self, request: str, task_types: List[TaskType], project_type: Optional[str] = None) -> List[SubTask]:
+    def _generate_subtasks(
+            self, request: str, task_types: List[TaskType], project_type: Optional[str] = None) -> List[SubTask]:
         """生成子任务列表（增强版）"""
         subtasks = []
 
@@ -467,9 +506,10 @@ class TaskParser:
             "如何", "怎么", "what", "how", "why", "分析", "总结", "描述", "介绍",
             "配置", "情况", "状态", "check", "describe"
         ])
-        
+
         # 如果是开放式问题，创建一个通用任务让 Qwen 自主决策
-        if is_open_question and len(task_types) == 1 and task_types[0] in [TaskType.DOCUMENTATION, TaskType.ENVIRONMENT_SETUP]:
+        if is_open_question and len(task_types) == 1 and task_types[0] in [
+                TaskType.DOCUMENTATION, TaskType.ENVIRONMENT_SETUP]:
             subtasks.append(SubTask(
                 id="task_qwen_agent",
                 name="Qwen 智能执行",
@@ -512,19 +552,22 @@ class TaskParser:
                 description="使用工具自动编写代码",
                 task_type=TaskType.CODE_GENERATION,
                 priority=TaskPriority.HIGH,
-                dependencies=self._get_dependencies(subtasks, ["task_env_check", "task_project_init"]),
+                dependencies=self._get_dependencies(
+                    subtasks, ["task_env_check", "task_project_init"]),
                 estimated_duration=300
             ))
 
         # 测试任务
-        if TaskType.TESTING in task_types or (TaskType.CODE_GENERATION in task_types and "测试" not in request):
+        if TaskType.TESTING in task_types or (
+                TaskType.CODE_GENERATION in task_types and "测试" not in request):
             subtasks.append(SubTask(
                 id="task_test",
                 name="自动化测试",
                 description="编写并执行测试用例",
                 task_type=TaskType.TESTING,
                 priority=TaskPriority.HIGH,
-                dependencies=self._get_dependencies(subtasks, ["task_code_dev"]),
+                dependencies=self._get_dependencies(
+                    subtasks, ["task_code_dev"]),
                 estimated_duration=120
             ))
 
@@ -565,7 +608,8 @@ class TaskParser:
 
         return subtasks
 
-    def _get_dependencies(self, subtasks: List[SubTask], potential_deps: List[str]) -> List[str]:
+    def _get_dependencies(
+            self, subtasks: List[SubTask], potential_deps: List[str]) -> List[str]:
         """获取依赖列表（只包含已存在的任务 ID）"""
         existing_ids = {task.id for task in subtasks}
         return [dep for dep in potential_deps if dep in existing_ids]

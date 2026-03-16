@@ -10,7 +10,7 @@ from .themes import ThemeManager
 __all__ = [
     "ConsoleUI",
     "TaskPanel",
-    "StatusTable", 
+    "StatusTable",
     "ProgressDisplay",
     "ThemeManager",
 ]

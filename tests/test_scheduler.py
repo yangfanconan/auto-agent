@@ -2,6 +2,9 @@
 TaskScheduler 单元测试
 """
 
+from core.task_parser import TaskPlan, SubTask, TaskType
+from core.task_tracker import TaskTracker
+from core.scheduler import TaskScheduler
 import pytest
 from datetime import datetime
 from pathlib import Path
@@ -9,10 +12,6 @@ import sys
 
 # 添加项目根目录到路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from core.scheduler import TaskScheduler
-from core.task_tracker import TaskTracker
-from core.task_parser import TaskPlan, SubTask, TaskType
 
 
 class TestTaskScheduler:
@@ -34,7 +33,8 @@ class TestTaskScheduler:
         def dummy_handler(plan_id, subtask):
             return {"success": True}
 
-        self.scheduler.register_handler(TaskType.CODE_GENERATION, dummy_handler)
+        self.scheduler.register_handler(
+            TaskType.CODE_GENERATION, dummy_handler)
         assert TaskType.CODE_GENERATION in self.scheduler._handlers
 
     def test_execute_plan_not_found(self):

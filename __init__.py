@@ -8,6 +8,8 @@ __version__ = "1.0.0"
 __author__ = "Auto-Agent Team"
 
 # 延迟导入，避免在包初始化时出现问题
+
+
 def __getattr__(name):
     """延迟导入属性"""
     if name in ('AutoAgent', 'TaskParser', 'TaskTracker', 'TaskScheduler'):
@@ -23,6 +25,7 @@ def __getattr__(name):
         from .utils import load_config, save_config, get_logger
         return locals()[name]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     # Core

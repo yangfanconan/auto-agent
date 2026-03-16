@@ -9,18 +9,18 @@
 system_profiler SPHardwareDataType
 
 # 2. 查看 CPU 信息
-sysctl -n machdep.cpu.brand_string
-sysctl -n hw.ncpu          # 逻辑核心数
-sysctl -n hw.physicalcpu   # 物理核心数
+sysctl - n machdep.cpu.brand_string
+sysctl - n hw.ncpu          # 逻辑核心数
+sysctl - n hw.physicalcpu   # 物理核心数
 
 # 3. 查看内存
-sysctl -n hw.memsize
+sysctl - n hw.memsize
 
 # 4. 查看 GPU 信息
 system_profiler SPDisplaysDataType
 
 # 5. 查看磁盘空间
-df -h /
+df - h /
 
 # 6. 查看内存使用情况
 vm_stat

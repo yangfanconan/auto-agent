@@ -172,7 +172,8 @@ class RuleEngine:
                         risk_level=rule.get("risk_level", RiskLevel.LOW),
                     )
             except Exception as e:
-                self.logger.error(f"自定义规则评估失败 [{rule.get('name', 'unknown')}]: {e}")
+                self.logger.error(
+                    f"自定义规则评估失败 [{rule.get('name', 'unknown')}]: {e}")
 
         # 再检查默认规则
         for rule in self._default_rules:
@@ -184,7 +185,8 @@ class RuleEngine:
                         risk_level=rule.get("risk_level", RiskLevel.LOW),
                     )
             except Exception as e:
-                self.logger.error(f"默认规则评估失败 [{rule.get('name', 'unknown')}]: {e}")
+                self.logger.error(
+                    f"默认规则评估失败 [{rule.get('name', 'unknown')}]: {e}")
 
         # 无匹配规则
         return None
@@ -218,7 +220,7 @@ class QwenDecisionEngine:
             try:
                 registry = get_tool_registry()
                 self._qwen_tool = registry.get("qwen")
-            except:
+            except BaseException:
                 pass
         return self._qwen_tool
 
@@ -314,7 +316,7 @@ class QwenDecisionEngine:
 
         # 在线程池中运行（避免阻塞异步事件循环）
         loop = asyncio.get_event_loop()
-        
+
         def run_qwen():
             # 使用同步方式调用（Qwen 工具内部处理异步）
             import subprocess
@@ -331,13 +333,14 @@ class QwenDecisionEngine:
 
         return await loop.run_in_executor(None, run_qwen)
 
-    def _parse_qwen_result(self, result: str, context: DecisionContext) -> DecisionResult:
+    def _parse_qwen_result(self, result: str,
+                           context: DecisionContext) -> DecisionResult:
         """解析 Qwen 返回的结果"""
         try:
             # 尝试提取 JSON
             json_start = result.find('{')
             json_end = result.rfind('}') + 1
-            
+
             if json_start >= 0 and json_end > json_start:
                 json_str = result[json_start:json_end]
                 data = json.loads(json_str)
@@ -400,7 +403,7 @@ class QwenDecisionEngine:
             json_end = result.rfind('}') + 1
             if json_start >= 0 and json_end > json_start:
                 return json.loads(result[json_start:json_end])
-        except:
+        except BaseException:
             pass
 
         # 解析失败，返回默认结构
@@ -409,15 +412,19 @@ class QwenDecisionEngine:
             "complexity": "medium",
             "estimated_steps": 3,
             "subtasks": [
-                {"name": "需求分析", "description": requirement, "tool": "qwen", "priority": 1},
-                {"name": "代码实现", "description": "根据需求编写代码", "tool": "opencode", "priority": 2},
-                {"name": "测试验证", "description": "测试功能是否正常", "tool": "opencode", "priority": 3},
+                {"name": "需求分析", "description": requirement,
+                    "tool": "qwen", "priority": 1},
+                {"name": "代码实现", "description": "根据需求编写代码",
+                    "tool": "opencode", "priority": 2},
+                {"name": "测试验证", "description": "测试功能是否正常",
+                    "tool": "opencode", "priority": 3},
             ],
             "risks": [],
             "suggestions": ["建议先进行需求分析", "注意代码质量"],
         }
 
-    async def diagnose_error(self, error: str, context: str = "") -> Dict[str, Any]:
+    async def diagnose_error(
+            self, error: str, context: str = "") -> Dict[str, Any]:
         """
         Qwen 异常诊断
 
@@ -449,7 +456,7 @@ class QwenDecisionEngine:
             json_end = result.rfind('}') + 1
             if json_start >= 0 and json_end > json_start:
                 return json.loads(result[json_start:json_end])
-        except:
+        except BaseException:
             pass
 
         return {
@@ -495,14 +502,17 @@ class DecisionEngine:
         2. 规则不匹配时调用 Qwen
         3. 记录决策历史
         """
-        self.logger.info(f"开始决策：tool={context.tool_name}, status={context.tool_status.value}")
+        self.logger.info(
+            f"开始决策：tool={
+                context.tool_name}, status={
+                context.tool_status.value}")
 
         # 第一层：预设规则
         rule_result = self.rule_engine.evaluate(context)
 
         if rule_result:
             self.logger.info(f"预设规则匹配：{rule_result.decision_type.value}")
-            
+
             # 检查是否需要升级到 Qwen
             if rule_result.decision_type == DecisionType.CALL_QWEN:
                 self.logger.info("规则建议调用 Qwen，启动智能决策")
@@ -520,7 +530,7 @@ class DecisionEngine:
         # 检查风险等级
         if result.risk_level in [RiskLevel.HIGH, RiskLevel.CRITICAL]:
             self.logger.warning(f"高风险决策：{result.reason}")
-            
+
             # 如果需要用户确认
             if result.decision_type == DecisionType.WAIT_USER and self._on_confirm_action:
                 self.logger.info("等待用户确认...")
@@ -538,7 +548,8 @@ class DecisionEngine:
 
         return result
 
-    def _record_decision(self, context: DecisionContext, result: DecisionResult):
+    def _record_decision(self, context: DecisionContext,
+                         result: DecisionResult):
         """记录决策历史"""
         record = {
             "timestamp": datetime.now().isoformat(),
@@ -559,7 +570,8 @@ class DecisionEngine:
         """需求解析（委托给 Qwen）"""
         return await self.qwen_engine.analyze_requirement(requirement)
 
-    async def diagnose_error(self, error: str, context: str = "") -> Dict[str, Any]:
+    async def diagnose_error(
+            self, error: str, context: str = "") -> Dict[str, Any]:
         """异常诊断（委托给 Qwen）"""
         return await self.qwen_engine.diagnose_error(error, context)
 

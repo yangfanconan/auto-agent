@@ -89,19 +89,19 @@ class AgentConfig:
     log: LogConfig = field(default_factory=LogConfig)
     websocket: WebsocketConfig = field(default_factory=WebsocketConfig)
     console_io: ConsoleIOConfig = field(default_factory=ConsoleIOConfig)
-    
+
     @classmethod
     def from_yaml(cls, path: str) -> 'AgentConfig':
         """从 YAML 文件加载配置"""
         config_path = Path(path)
         if not config_path.exists():
             return cls()
-        
+
         with open(config_path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f) or {}
-        
+
         config = cls()
-        
+
         # 解析基本配置
         for key, value in data.items():
             if hasattr(config, key) and value is not None:
@@ -110,20 +110,20 @@ class AgentConfig:
                     sub_config_class = getattr(config, key).__class__
                     if hasattr(sub_config_class, '__dataclass_fields__'):
                         sub_config = sub_config_class(**{
-                            k: v for k, v in value.items() 
+                            k: v for k, v in value.items()
                             if k in sub_config_class.__dataclass_fields__
                         })
                         setattr(config, key, sub_config)
                 else:
                     setattr(config, key, value)
-        
+
         return config
-    
+
     def to_yaml(self, path: str):
         """保存配置到 YAML 文件"""
         config_path = Path(path)
         config_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         data = {
             'name': self.name,
             'version': self.version,
@@ -160,7 +160,7 @@ class AgentConfig:
                 'save_json': self.log.save_json,
             }
         }
-        
+
         with open(config_path, 'w', encoding='utf-8') as f:
             yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
 

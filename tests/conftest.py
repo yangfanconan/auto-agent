@@ -94,7 +94,7 @@ def mock_subprocess():
 def sample_task_plan():
     """创建示例任务计划"""
     from core.task_parser import TaskPlan, SubTask, TaskType, TaskPriority
-    
+
     return TaskPlan(
         id="test_plan_001",
         title="测试任务计划",
@@ -133,7 +133,7 @@ def sample_task_plan():
 def sample_subtask():
     """创建示例子任务"""
     from core.task_parser import SubTask, TaskType, TaskPriority
-    
+
     return SubTask(
         id="test_subtask_001",
         name="测试子任务",

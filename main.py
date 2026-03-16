@@ -65,25 +65,43 @@ def print_tools_status():
 def print_v2_features_status(config):
     """打印 v2.0 增强功能状态"""
     print("\n🚀 Auto-Agent v2.0 增强功能:")
-    
+
     # WebSocket 状态
-    ws_enabled = getattr(config, 'websocket', None) and getattr(config.websocket, 'enabled', True)
-    ws_port = getattr(config.websocket, 'port', 8765) if getattr(config, 'websocket', None) else 8765
+    ws_enabled = getattr(
+        config,
+        'websocket',
+        None) and getattr(
+        config.websocket,
+        'enabled',
+        True)
+    ws_port = getattr(
+        config.websocket,
+        'port',
+        8765) if getattr(
+        config,
+        'websocket',
+        None) else 8765
     ws_status = f"✅ 已启用 (端口：{ws_port})" if ws_enabled else "❌ 已禁用"
     print(f"  📡 WebSocket 服务：{ws_status}")
-    
+
     # 控制台 IO 接管状态
-    io_enabled = getattr(config, 'console_io', None) and getattr(config.console_io, 'enabled', True)
+    io_enabled = getattr(
+        config,
+        'console_io',
+        None) and getattr(
+        config.console_io,
+        'enabled',
+        True)
     io_status = "✅ 已启用" if io_enabled else "❌ 已禁用"
     print(f"  📝 控制台 IO 接管：{io_status}")
-    
+
     # 决策引擎状态
     try:
         decision_engine = get_decision_engine()
         print(f"  🧠 智能决策引擎：✅ 已初始化")
     except Exception as e:
         print(f"  🧠 智能决策引擎：⚠️ 初始化失败 ({e})")
-    
+
     # 工具调度器状态
     try:
         scheduler = get_scheduler()
@@ -95,17 +113,17 @@ def print_v2_features_status(config):
 def run_interactive_mode(workspace: str, config: AgentConfig):
     """运行交互模式"""
     logger = get_logger()
-    
+
     # 初始化智能体
     agent = AutoAgent(workspace=workspace, config=config.__dict__)
-    
+
     # 初始化并设置模块
     env_manager = EnvironmentManager(workspace)
     code_generator = CodeGenerator(workspace)
     test_runner = TestRunner(workspace)
     git_manager = GitManager(workspace)
     delivery = DeliveryManager(workspace)
-    
+
     agent.set_modules(
         environment=env_manager,
         code_generator=code_generator,
@@ -113,31 +131,32 @@ def run_interactive_mode(workspace: str, config: AgentConfig):
         git_manager=git_manager,
         delivery=delivery
     )
-    
+
     print("\n✅ 智能体已就绪，请输入任务指令（输入 'quit' 退出）")
     print("-" * 50)
-    
+
     while True:
         try:
             # 获取用户输入
             user_input = input("\n📝 任务指令：").strip()
-            
+
             if not user_input:
                 continue
-            
+
             if user_input.lower() in ['quit', 'exit', 'q']:
                 print("\n👋 再见！")
                 break
-            
+
             if user_input.lower() == 'status':
-                report = agent.tracker.get_progress_report(agent.scheduler._current_plan.id) if agent.scheduler._current_plan else None
+                report = agent.tracker.get_progress_report(
+                    agent.scheduler._current_plan.id) if agent.scheduler._current_plan else None
                 if report:
                     print("\n📊 当前任务状态:")
                     print(json.dumps(report, indent=2, ensure_ascii=False))
                 else:
                     print("\n暂无正在执行的任务")
                 continue
-            
+
             if user_input.lower() == 'help':
                 print("""
 可用命令:
@@ -147,34 +166,53 @@ def run_interactive_mode(workspace: str, config: AgentConfig):
   quit       - 退出程序
                 """)
                 continue
-            
+
             # 执行任务
             print("\n🔄 正在处理任务...")
             print("-" * 50)
-            
+
             result = agent.execute(user_input)
-            
+
             # 输出结果
             print("\n" + "=" * 50)
             print("📋 任务执行结果:")
             print("=" * 50)
-            
-            print(f"\n✅ 完成状态：{'成功' if result.get('success', False) else '部分完成'}")
+
+            print(
+                f"\n✅ 完成状态：{
+                    '成功' if result.get(
+                        'success',
+                        False) else '部分完成'}")
             print(f"📊 整体进度：{result.get('overall_progress', 0):.1f}%")
-            
+
             # 子任务状态
             subtasks = result.get('subtasks', [])
             if subtasks:
                 print("\n子任务:")
                 for task in subtasks:
-                    status_icon = {"completed": "✅", "failed": "❌", "in_progress": "🔄", "pending": "⏳"}.get(task.get('status', 'pending'), '⏳')
-                    print(f"  {status_icon} {task.get('name', 'Unknown')}: {task.get('status', 'pending')}")
-            
+                    status_icon = {
+                        "completed": "✅",
+                        "failed": "❌",
+                        "in_progress": "🔄",
+                        "pending": "⏳"}.get(
+                        task.get(
+                            'status',
+                            'pending'),
+                        '⏳')
+                    print(
+                        f"  {status_icon} {
+                            task.get(
+                                'name',
+                                'Unknown')}: {
+                            task.get(
+                                'status',
+                                'pending')}")
+
             # 简报
             if agent.scheduler._current_plan:
                 briefing = agent.get_briefing(agent.scheduler._current_plan.id)
                 print(f"\n{briefing}")
-            
+
         except KeyboardInterrupt:
             print("\n\n⚠️  任务中断")
         except Exception as e:
@@ -185,17 +223,17 @@ def run_interactive_mode(workspace: str, config: AgentConfig):
 def run_command_mode(command: str, workspace: str, config: AgentConfig):
     """运行命令模式"""
     logger = get_logger()
-    
+
     # 初始化智能体
     agent = AutoAgent(workspace=workspace, config=config.__dict__)
-    
+
     # 初始化并设置模块
     env_manager = EnvironmentManager(workspace)
     code_generator = CodeGenerator(workspace)
     test_runner = TestRunner(workspace)
     git_manager = GitManager(workspace)
     delivery = DeliveryManager(workspace)
-    
+
     agent.set_modules(
         environment=env_manager,
         code_generator=code_generator,
@@ -203,19 +241,19 @@ def run_command_mode(command: str, workspace: str, config: AgentConfig):
         git_manager=git_manager,
         delivery=delivery
     )
-    
+
     print(f"\n🔄 执行任务：{command}")
     print("-" * 50)
-    
+
     # 执行任务
     result = agent.execute(command)
-    
+
     # 输出 JSON 结果
     print("\n" + "=" * 50)
     print("📋 任务执行结果:")
     print("=" * 50)
     print(json.dumps(result, indent=2, ensure_ascii=False))
-    
+
     return 0 if result.get('success', False) else 1
 
 
@@ -223,27 +261,27 @@ def check_environment(workspace: str):
     """检查环境"""
     print("\n🔍 环境检查:")
     print("-" * 50)
-    
+
     env_manager = EnvironmentManager(workspace)
     report = env_manager.scan()
-    
+
     print(f"\n操作系统：{report.os_info}")
     print(f"Python: {report.python_version}")
     print(f"Node.js: {report.node_version or '未安装'}")
     print(f"Git: {report.git_version or '未安装'}")
     print(f"Opencode: {'✅ 可用' if report.opencode_available else '❌ 不可用'}")
     print(f"Qwen: {'✅ 可用' if report.qwen_available else '⚠️ 可选'}")
-    
+
     if report.issues:
         print(f"\n⚠️  发现问题:")
         for issue in report.issues:
             print(f"  - {issue}")
-    
+
     if report.recommendations:
         print(f"\n💡 建议:")
         for rec in report.recommendations:
             print(f"  - {rec}")
-    
+
     return report
 
 
@@ -315,7 +353,7 @@ def main():
         type=str,
         help="配置文件路径"
     )
-    
+
     parser.add_argument(
         "--verbose", "-v",
         action="store_true",
@@ -340,14 +378,15 @@ def main():
         action="store_true",
         help="禁用控制台 IO 接管"
     )
-    
+
     args = parser.parse_args()
 
     # 打印横幅
     print_banner()
 
     # 加载配置
-    config_path = args.config if args.config else str(Path(__file__).parent / "config" / "settings.yaml")
+    config_path = args.config if args.config else str(
+        Path(__file__).parent / "config" / "settings.yaml")
     config = load_config(config_path)
 
     if args.verbose:
@@ -359,7 +398,7 @@ def main():
 
     # 打印工具状态
     print_tools_status()
-    
+
     # 打印 v2.0 增强功能状态
     print_v2_features_status(config)
 
@@ -367,12 +406,19 @@ def main():
     is_background = not sys.stdin.isatty()
 
     # 启动 WebSocket 服务（始终启用，除非明确禁用）
-    enable_websocket = getattr(config, 'websocket', None) and getattr(config.websocket, 'enabled', True)
-    
+    enable_websocket = getattr(
+        config,
+        'websocket',
+        None) and getattr(
+        config.websocket,
+        'enabled',
+        True)
+
     # 控制台 IO 接管（后台运行时禁用）
     try:
-        enable_console_redirect = getattr(config, 'console_io', None) and getattr(config.console_io, 'enabled', True) and not args.no_console_redirect
-    except:
+        enable_console_redirect = getattr(config, 'console_io', None) and getattr(
+            config.console_io, 'enabled', True) and not args.no_console_redirect
+    except BaseException:
         enable_console_redirect = False
 
     # 后台运行时禁用控制台交互
@@ -382,7 +428,7 @@ def main():
 
     if args.enable_console_redirect:
         enable_console_redirect = True
-    
+
     if args.no_console_redirect:
         enable_console_redirect = False
 
@@ -390,7 +436,7 @@ def main():
     try:
         if hasattr(config, 'websocket') and hasattr(config.websocket, 'port'):
             websocket_port = config.websocket.port
-    except:
+    except BaseException:
         pass
 
     if args.websocket_port:
@@ -515,7 +561,8 @@ def start_enhanced_features(
 
                             if loop and loop.is_running():
                                 loop.call_soon_threadsafe(
-                                    lambda m=msg: _ws_manager._broadcast_queue.put_nowait(m)
+                                    lambda m=msg: _ws_manager._broadcast_queue.put_nowait(
+                                        m)
                                 )
                         except Exception:
                             pass
@@ -524,7 +571,8 @@ def start_enhanced_features(
                 except Exception as e:
                     time.sleep(0.1)
 
-        forwarder_thread = threading.Thread(target=message_forwarder, daemon=True)
+        forwarder_thread = threading.Thread(
+            target=message_forwarder, daemon=True)
         forwarder_thread.start()
 
         print(f"📡 控制台 IO 接管已启用")
@@ -542,16 +590,20 @@ def run_webui(host: str, port: int, websocket_port: int = 8765):
         from fastapi.responses import FileResponse, HTMLResponse
         import uvicorn
         from pathlib import Path
-        
+
         # 创建 FastAPI 应用
         app = FastAPI(title="Auto-Agent v2.0")
-        
+
         # 静态文件目录
         static_dir = Path(__file__).parent / "ui" / "static"
-        
+
         # 挂载静态文件
         if static_dir.exists():
-            app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+            app.mount(
+                "/static",
+                StaticFiles(
+                    directory=str(static_dir)),
+                name="static")
         else:
             static_dir.mkdir(parents=True, exist_ok=True)
             # 创建默认的 index.html
@@ -568,7 +620,7 @@ def run_webui(host: str, port: int, websocket_port: int = 8765):
                 </body>
                 </html>
                 """)
-        
+
         # API 路由
         @app.get("/")
         async def root():
@@ -576,13 +628,14 @@ def run_webui(host: str, port: int, websocket_port: int = 8765):
             index_path = static_dir / "index.html"
             if index_path.exists():
                 return FileResponse(str(index_path))
-            return HTMLResponse(content="<h1>Auto-Agent v2.0</h1><p>请访问 /static/index.html</p>")
-        
+            return HTMLResponse(
+                content="<h1>Auto-Agent v2.0</h1><p>请访问 /static/index.html</p>")
+
         @app.get("/api/health")
         async def health():
             """健康检查"""
             return {"status": "ok", "version": "2.0"}
-        
+
         @app.get("/api/tools/status")
         async def tools_status():
             """获取工具状态"""
@@ -599,7 +652,7 @@ def run_webui(host: str, port: int, websocket_port: int = 8765):
                 return tools
             except Exception as e:
                 return {"error": str(e)}
-        
+
         @app.get("/api/tasks")
         async def list_tasks():
             """获取任务列表"""
@@ -610,7 +663,7 @@ def run_webui(host: str, port: int, websocket_port: int = 8765):
                 return {"tasks": tasks}
             except Exception as e:
                 return {"tasks": [], "error": str(e)}
-        
+
         @app.post("/api/tasks")
         async def create_task(task_data: dict):
             """创建任务"""
@@ -619,13 +672,13 @@ def run_webui(host: str, port: int, websocket_port: int = 8765):
                 from core.tool_scheduler import get_scheduler, TaskPriority
                 from core.events import publish_event
                 scheduler = get_scheduler()
-                
+
                 description = task_data.get("description", "")
                 tool = task_data.get("tool", "auto")
-                
+
                 if tool == "auto":
                     tool = "opencode"
-                
+
                 # 直接使用 await（不要用 asyncio.run，会干扰现有事件循环）
                 task_id = await scheduler.submit_task(
                     name=description[:50],
@@ -642,7 +695,9 @@ def run_webui(host: str, port: int, websocket_port: int = 8765):
                 )
 
                 # 启动任务执行（后台）
-                asyncio.create_task(_execute_task_background(task_id, scheduler))
+                asyncio.create_task(
+                    _execute_task_background(
+                        task_id, scheduler))
                 return {"task_id": task_id, "status": "submitted"}
             except Exception as e:
                 import traceback
@@ -724,10 +779,12 @@ def run_webui(host: str, port: int, websocket_port: int = 8765):
 
                 # 安全检查：确保路径存在且是目录
                 if not target_path.exists():
-                    return {"error": f"路径不存在: {path}", "current_path": str(target_path)}
+                    return {"error": f"路径不存在: {path}",
+                            "current_path": str(target_path)}
 
                 if not target_path.is_dir():
-                    return {"error": f"不是目录: {path}", "current_path": str(target_path)}
+                    return {"error": f"不是目录: {path}",
+                            "current_path": str(target_path)}
 
                 items = []
                 for item in target_path.iterdir():
@@ -744,10 +801,14 @@ def run_webui(host: str, port: int, websocket_port: int = 8765):
                         continue
 
                 # 排序：目录在前，文件在后
-                items.sort(key=lambda x: (0 if x["type"] == "directory" else 1, x["name"].lower()))
+                items.sort(
+                    key=lambda x: (
+                        0 if x["type"] == "directory" else 1,
+                        x["name"].lower()))
 
                 # 获取父目录
-                parent_path = str(target_path.parent) if target_path.parent != target_path else None
+                parent_path = str(
+                    target_path.parent) if target_path.parent != target_path else None
 
                 return {
                     "current_path": str(target_path),

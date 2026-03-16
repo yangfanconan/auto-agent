@@ -3,6 +3,11 @@
 测试任务提交、执行、状态监控等功能
 """
 
+from adapters.base_tool import ToolStatus, ToolResult
+from core.tool_scheduler import (
+    ToolScheduler, Task, TaskPlan, TaskStatus, TaskPriority,
+    get_scheduler, run_scheduler_loop
+)
 import pytest
 import asyncio
 import sys
@@ -11,12 +16,6 @@ from datetime import datetime
 
 # 添加项目路径
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from core.tool_scheduler import (
-    ToolScheduler, Task, TaskPlan, TaskStatus, TaskPriority,
-    get_scheduler, run_scheduler_loop
-)
-from adapters.base_tool import ToolStatus, ToolResult
 
 
 class TestTask:
@@ -84,10 +83,34 @@ class TestTaskPlan:
 
         # 添加 4 个任务，2 个完成，1 个失败，1 个等待
         plan.tasks = [
-            Task(id="t1", name="T1", description="D1", tool_name="opencode", input_text="", status=TaskStatus.COMPLETED),
-            Task(id="t2", name="T2", description="D2", tool_name="opencode", input_text="", status=TaskStatus.COMPLETED),
-            Task(id="t3", name="T3", description="D3", tool_name="opencode", input_text="", status=TaskStatus.FAILED),
-            Task(id="t4", name="T4", description="D4", tool_name="opencode", input_text="", status=TaskStatus.PENDING),
+            Task(
+                id="t1",
+                name="T1",
+                description="D1",
+                tool_name="opencode",
+                input_text="",
+                status=TaskStatus.COMPLETED),
+            Task(
+                id="t2",
+                name="T2",
+                description="D2",
+                tool_name="opencode",
+                input_text="",
+                status=TaskStatus.COMPLETED),
+            Task(
+                id="t3",
+                name="T3",
+                description="D3",
+                tool_name="opencode",
+                input_text="",
+                status=TaskStatus.FAILED),
+            Task(
+                id="t4",
+                name="T4",
+                description="D4",
+                tool_name="opencode",
+                input_text="",
+                status=TaskStatus.PENDING),
         ]
 
         # 进度应该是 50% (2/4 完成)
@@ -101,7 +124,12 @@ class TestTaskPlan:
             description="测试"
         )
         plan.tasks = [
-            Task(id="t1", name="T1", description="D1", tool_name="opencode", input_text="")
+            Task(
+                id="t1",
+                name="T1",
+                description="D1",
+                tool_name="opencode",
+                input_text="")
         ]
 
         data = plan.to_dict()
@@ -157,8 +185,10 @@ class TestToolScheduler:
             name="测试计划",
             description="包含多个子任务的测试计划",
             subtasks=[
-                {"name": "子任务 1", "description": "D1", "tool": "qwen", "input": "输入 1"},
-                {"name": "子任务 2", "description": "D2", "tool": "opencode", "input": "输入 2"},
+                {"name": "子任务 1", "description": "D1",
+                    "tool": "qwen", "input": "输入 1"},
+                {"name": "子任务 2", "description": "D2",
+                    "tool": "opencode", "input": "输入 2"},
             ]
         )
 
