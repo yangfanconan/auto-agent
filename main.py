@@ -221,7 +221,7 @@ async def _execute_task_background(task_id: str, scheduler):
         logger.error(f"任务执行异常：{e}")
 
 
-def handle_get_workspaces() -> Dict[str, Any]:
+async def handle_get_workspaces() -> Dict[str, Any]:
     """处理获取工作目录"""
     try:
         from pathlib import Path
