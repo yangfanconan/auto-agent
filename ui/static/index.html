@@ -392,30 +392,117 @@
             .sidebar { width: 100%; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.1); }
             .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
         }
-    </style>
+    
+        /* 响应式设计增强 */
+        @media (max-width: 1200px) {
+            .container {
+                max-width: 100%;
+                padding: 10px;
+            }
+        }
+        
+        @media (max-width: 992px) {
+            .sidebar {
+                width: 200px;
+            }
+            .main-content {
+                padding: 20px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                height: auto;
+                border-right: none;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+            }
+            .nav-menu {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            .nav-item {
+                margin: 0;
+                flex: 1;
+                min-width: 120px;
+                justify-content: center;
+            }
+            .main-content {
+                padding: 15px;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .logo {
+                font-size: 20px;
+                text-align: center;
+            }
+            .nav-item {
+                padding: 10px 12px;
+                font-size: 14px;
+            }
+            .card {
+                padding: 15px;
+            }
+            .btn {
+                padding: 10px 16px;
+                font-size: 14px;
+            }
+        }
+        
+        /* 焦点样式 */
+        *:focus {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
+        
+        /* 减少动画（可访问性） */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+        
+        /* 高对比度模式支持 */
+        @media (prefers-contrast: high) {
+            :root {
+                --bg-dark: #000000;
+                --bg-card: #1a1a1a;
+                --text-primary: #ffffff;
+                --text-secondary: #cccccc;
+            }
+        }
+
+</style>
 </head>
 <body>
     <!-- 侧边导航 -->
     <aside class="sidebar">
         <div class="logo">🤖 Auto-Agent</div>
         <ul class="nav-menu">
-            <li class="nav-item active" data-page="tasks">
+            <li class="nav-item active" data-page="tasks" role="button" tabindex="0" aria-label="任务管理">
                 <span class="nav-icon">📋</span>
                 <span>任务管理</span>
             </li>
-            <li class="nav-item" data-page="projects">
+            <li class="nav-item" data-page="projects" role="button" tabindex="0" aria-label="项目管理">
                 <span class="nav-icon">📁</span>
                 <span>项目管理</span>
             </li>
-            <li class="nav-item" data-page="templates">
+            <li class="nav-item" data-page="templates" role="button" tabindex="0" aria-label="提示词模板">
                 <span class="nav-icon">📝</span>
                 <span>提示词模板</span>
             </li>
-            <li class="nav-item" data-page="optimize">
+            <li class="nav-item" data-page="optimize" role="button" tabindex="0" aria-label="提示词优化">
                 <span class="nav-icon">✨</span>
                 <span>提示词优化</span>
             </li>
-            <li class="nav-item" data-page="logs">
+            <li class="nav-item" data-page="logs" role="button" tabindex="0" aria-label="执行日志">
                 <span class="nav-icon">📊</span>
                 <span>执行日志</span>
             </li>
@@ -423,7 +510,7 @@
     </aside>
 
     <!-- 主内容区 -->
-    <main class="main-content">
+    <main class="main-content" role="main">
         <!-- 任务管理页面 -->
         <section id="tasks" class="page active">
             <div class="page-header">
@@ -493,7 +580,7 @@
                         <input type="checkbox" id="autoCommit"> 自动提交 Git
                     </label>
                 </div>
-                <button class="btn btn-primary" onclick="createTask()" style="width: 100%;">🚀 开始执行</button>
+                <button class="btn btn-primary" type="button" onclick="createTask()" style="width: 100%;">🚀 开始执行</button>
             </div>
             
             <!-- 任务列表 -->
@@ -579,7 +666,7 @@
                         </div>
                     </div>
                 </div>
-                <button class="btn btn-primary" onclick="optimizePrompt()" style="width: 100%;">✨ 开始优化</button>
+                <button class="btn btn-primary" type="button" onclick="optimizePrompt()" style="width: 100%;">✨ 开始优化</button>
             </div>
             
             <div class="card" id="optimizeResult" style="display: none;">
@@ -588,7 +675,7 @@
                 </div>
                 <textarea class="form-textarea" id="optimizedPrompt" readonly style="min-height: 200px;"></textarea>
                 <div style="display: flex; gap: 8px; margin-top: 16px;">
-                    <button class="btn btn-primary" onclick="useOptimizedPrompt()">使用此提示词</button>
+                    <button class="btn btn-primary" type="button" onclick="useOptimizedPrompt()">使用此提示词</button>
                     <button class="btn btn-secondary" onclick="copyOptimizedPrompt()">复制</button>
                 </div>
             </div>
@@ -640,7 +727,7 @@
                 <input type="text" class="form-input" id="newProjectTags" placeholder="python, web, api">
             </div>
             <div style="display: flex; gap: 8px;">
-                <button class="btn btn-primary" onclick="confirmAddProject()" style="flex: 1;">添加</button>
+                <button class="btn btn-primary" type="button" onclick="confirmAddProject()" style="flex: 1;">添加</button>
                 <button class="btn btn-secondary" onclick="closeAddProjectDialog()" style="flex: 1;">取消</button>
             </div>
         </div>
@@ -656,7 +743,7 @@
             <div id="breadcrumb" style="margin-bottom: 16px; color: var(--primary); font-size: 13px;"></div>
             <div id="fileList" style="display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto;"></div>
             <div style="margin-top: 16px;">
-                <button class="btn btn-primary" onclick="confirmWorkspace()" style="width: 100%;">确认选择</button>
+                <button class="btn btn-primary" type="button" onclick="confirmWorkspace()" style="width: 100%;">确认选择</button>
             </div>
         </div>
     </div>
@@ -914,7 +1001,7 @@
                     <div class="empty-state" style="grid-column: 1/-1;">
                         <div class="empty-icon">📂</div>
                         <div class="empty-text">暂无项目，添加一个吧！</div>
-                        <button class="btn btn-primary" onclick="showAddProjectDialog()">➕ 添加项目</button>
+                        <button class="btn btn-primary" type="button" onclick="showAddProjectDialog()">➕ 添加项目</button>
                     </div>
                 `;
                 return;
